@@ -1,6 +1,7 @@
 //	File: fn_copSeizeVeh.sqf
 //	Author: Bryan "Tonic" Boardwine
 //	Description: Will seize the car
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 private["_unit","_vehicle","_gangID"];
 _unit = param [0,objNull,[objNull]];
@@ -21,20 +22,18 @@ _plate = _dbInfo select 1;
 
 if([_vehicle] call OEC_fnc_skinName isEqualTo "APD Vandal" && _gangID isEqualTo 0 && typeOf _vehicle isEqualTo "C_Hatchback_01_sport_F") then {
 	// APD vandal skins in personal garages get transferred on seize
-	_color = '"[Police,0]"'; // normal apd skin
-	_query = format ["UPDATE "+dbColumVehicle+" SET active='0', persistentServer='0', pid='%1', color='%2', side='cop' WHERE pid='%3' AND plate='%4'",_seizerUID,_color,_uid,_plate];
-	[_query,1] call OES_fnc_asyncCall;
+	// 使用 vehicleMapper 转移并设置为警用
+	["seizeandtransfer", [_uid, str _plate, _seizerUID, "'[Police,0]'", "cop"]] call DB_fnc_vehicleMapper;
 } else {
 	if((typeof _vehicle) in ["B_Heli_Transport_01_F"]) then {
-		//_query = format["UPDATE "+dbColumVehicle+" SET active='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
-		//_sql = [_query,1] call OES_fnc_asyncCall;
+		// 直升机不处理
 	}else{
 		if !(_gangID isEqualTo 0) then {
-			_query = format["UPDATE "+dbColumGangVehicle+" SET alive='0' WHERE gang_id='%1' AND plate='%2'",_gangID,_plate];
-			_sql = [_query,1] call OES_fnc_asyncCall;
+			// 使用 vehicleMapper 删除帮派车辆
+			["deletegangbyplate", [str _gangID, str _plate]] call DB_fnc_vehicleMapper;
 		} else {
-			_query = format["UPDATE "+dbColumVehicle+" SET alive='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
-			_sql = [_query,1] call OES_fnc_asyncCall;
+			// 使用 vehicleMapper 删除玩家车辆
+			["sell", [_uid, str _plate]] call DB_fnc_vehicleMapper;
 		};
 	};
 };

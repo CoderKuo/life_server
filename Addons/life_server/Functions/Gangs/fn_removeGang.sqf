@@ -1,5 +1,7 @@
 //	Author: Bryan "Tonic" Boardwine
 //	File: fn_removeGang
+//  Modified: 迁移到 PostgreSQL Mapper 层
+
 params [
 	["_onlineMembers",[],[[]]],
 	["_groupID",0,[0]]
@@ -7,10 +9,13 @@ params [
 
 if(count _onlineMembers isEqualTo 0 || _groupID isEqualTo 0) exitWith {};
 
-[format["UPDATE gangs SET active='0' WHERE id='%1'",_groupID],1] call OES_fnc_asyncCall;
+// 使用 Mapper 停用帮派
+["deactivategang", [str _groupID]] call DB_fnc_gangMapper;
 
-[format["UPDATE gangmembers SET gangname='', gangid='-1', rank='-1' WHERE gangid='%1'",_groupID],1] call OES_fnc_asyncCall;
+// 移除所有成员
+["removeallmembers", [str _groupID]] call DB_fnc_gangMapper;
 
-_result = [format["SELECT id FROM gangs WHERE active='1' AND id='%1'",_groupID],2] call OES_fnc_asyncCall;
+// 检查帮派是否仍然活动
+_result = ["checkgangactive", [str _groupID]] call DB_fnc_gangMapper;
 
 [_groupID] remoteExec ["OEC_fnc_gang1Disbanded",_onlineMembers,false];

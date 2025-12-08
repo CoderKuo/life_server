@@ -1,4 +1,5 @@
-private["_flag","_deleted","_handle","_dbInfo","_gangID","_uid","_plate","_query","_illegal_vehicles"];
+//  Modified: 迁移到 PostgreSQL Mapper 层
+private["_flag","_deleted","_handle","_dbInfo","_gangID","_uid","_plate","_illegal_vehicles"];
 _flag = _this select 0;
 
 _illegal_vehicles = ["O_T_LSV_02_armed_F","I_C_Offroad_02_LMG_F","I_G_Offroad_01_AT_F","B_T_LSV_01_armed_F","I_MRAP_03_F","B_MRAP_01_F","B_G_Offroad_01_armed_F","B_Heli_Transport_03_black_F","O_MRAP_02_F","O_Heli_Transport_04_bench_F","B_Heli_Transport_01_camo_F","C_Plane_Civil_01_racing_F","B_T_VTOL_01_vehicle_F","B_T_VTOL_01_infantry_F"];
@@ -37,11 +38,12 @@ _illegal_vehicles = ["O_T_LSV_02_armed_F","I_C_Offroad_02_LMG_F","I_G_Offroad_01
 				_plate = _dbInfo select 1;
 				if (_uid isEqualTo "" && _plate isEqualTo 0) exitWith {};
 				if !(_gangID isEqualTo 0) then {
-					_query = format["UPDATE "+dbColumGangVehicle+" SET active='0', persistentServer='0' WHERE gang_id='%1' AND plate='%2'",_gangID,_plate];
+					// 使用 gangMapper 停用帮派车辆
+					["deactivatevehicle", [str _gangID, str _plate]] spawn DB_fnc_gangMapper;
 				} else {
-					_query = format["UPDATE "+dbColumVehicle+" SET active='0', persistentServer='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
+					// 使用 vehicleMapper 停用车辆
+					["deactivate", [_uid, str _plate]] spawn DB_fnc_vehicleMapper;
 				};
-				[_query,1] spawn OES_fnc_asyncCall;
 			};
 		};
 	};

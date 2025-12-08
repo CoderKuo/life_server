@@ -1,12 +1,14 @@
 /*
-ShongY制作日志系统
-*/
+ * ShongY制作日志系统
+ * Modified: 迁移到 PostgreSQL Mapper 层
+ */
 params [
-["_PID","",[""]],
-["_LOGTitle","",[""]],
-["_LOG","",[""]]
+    ["_PID", "", [""]],
+    ["_LOGTitle", "", [""]],
+    ["_LOG", "", [""]]
 ];
-_query = format ["INSERT INTO playerlogs (playerID,logTitle,log) VALUES('%1','%2','%3')",_PID,_LOGTitle,_LOG];
-[_query,1] call OES_fnc_asyncCall;
+
+// 使用 logMapper 插入日志
+["insertlog", [_PID, _LOGTitle, _LOG]] call DB_fnc_logMapper;
 
 //[getPlayerUID player, "TEST-Log", format ["%1 hat die Log Funktion mit Params getestet!",name player]] remoteExec ["DB_fnc_AdvancedLog",2];

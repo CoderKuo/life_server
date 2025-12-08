@@ -1,7 +1,8 @@
 //	File: fn_getGangInfo.sqf
 //	Author: Poseidon
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_query2","_query","_queryResult2","_queryResult"];
+private["_queryResult2","_queryResult"];
 params [
 	["_mode",0,[0]],
 	["_gangID",-1,[0]],
@@ -17,11 +18,11 @@ if(_gangID isEqualTo -1 || isNull _unit) exitWith {
 
 switch (_mode) do {
 	case 0: {
-		_query = format["SELECT playerid, name, rank FROM gangmembers WHERE gangid='%1' ORDER BY rank DESC",_gangID];
-		_queryResult = [_query,2,true] call OES_fnc_asyncCall;
+		// 使用 Mapper 获取帮派成员
+		_queryResult = ["getmembers", [str _gangID]] call DB_fnc_gangMapper;
 
-		_query2 = format["SELECT bank FROM gangs WHERE id='%1'",_gangID];
-		_queryResult2 = [_query2,2] call OES_fnc_asyncCall;
+		// 获取帮派银行
+		_queryResult2 = ["getgangbank", [str _gangID]] call DB_fnc_gangMapper;
 
 		[[_queryResult,_queryResult2],"OEC_fnc_populateInfo",(owner _unit),false] spawn OEC_fnc_MP;
 	};

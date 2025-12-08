@@ -3,6 +3,7 @@
 //	Description:
 //	Sends the query request to the database, if an array is returned then it creates
 //	the vehicle if it's not in use or dead.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 private["_query","_sql","_vehicle","_nearVehicles","_name","_side","_tickTime","_turbo","_gangID","_playerIDs","_owners","_modifications","_boat"];
 params [
@@ -35,29 +36,25 @@ _airCarrier = (getMarkerPos "civ_plane_16" distance2D _unit_return <= 100);
 if(_vid isEqualTo "" || _pid isEqualTo "") exitWith {};
 if(_vid in serv_sv_use) exitWith {};
 serv_sv_use pushBack _vid;
+
+// 使用 vehicleMapper 获取车辆详情
+_tickTime = diag_tickTime;
+private _queryResult = [];
 if !(_gangID isEqualTo 0) then {
-	_query = format["SELECT CONVERT(id, char), side, classname, type, gang_id, alive, active, plate, color, insured, modifications FROM "+dbColumGangVehicle+" WHERE id=%1 AND gang_id='%2'",_vid,_gangID];
+	_queryResult = ["getgangdetails", [_vid, str _gangID]] call DB_fnc_vehicleMapper;
 } else {
-	_query = format["SELECT CONVERT(id, char), side, classname, type, pid, alive, active, plate, color, insured, modifications, customName FROM "+dbColumVehicle+" WHERE id=%1 AND pid='%2'",_vid,_pid];
+	_queryResult = ["getdetails", [_vid, _pid]] call DB_fnc_vehicleMapper;
 };
 
 
-_tickTime = diag_tickTime;
-_queryResult = [_query,2] call OES_fnc_asyncCall;
+// 解析颜色数据 - 现在从 JSONB 返回 SQF 格式字符串
+_queryResult set [8, [_queryResult select 8, ["", 0]] call DB_fnc_parseJsonb];
 
-
-_new = (_queryResult select 8) splitString "[,]";
-_new = [_new select 0, call compile (_new select 1)];
-//_new = [(_queryResult select 8)] call OES_fnc_mresToArray;
-if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-_queryResult set[8,_new];
-
-_new = [(_queryResult select 10)] call OES_fnc_mresToArray;
-if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-_queryResult set[10,_new];
+// 解析改装数据 - 现在从 JSONB 返回 SQF 格式字符串
+_queryResult set [10, [_queryResult select 10, [0,0,0,0,0,0,0,0]] call DB_fnc_parseJsonb];
 
 "------------- Spawn Selected Vehicle -------------" call OES_fnc_diagLog;
-format["QUERY: %1",_query] call OES_fnc_diagLog;
+format["Method: %1", if (_gangID isEqualTo 0) then {"getdetails"} else {"getgangdetails"}] call OES_fnc_diagLog;
 format["完成时间: %1 (in seconds)",(diag_tickTime - _tickTime)] call OES_fnc_diagLog;
 format["车辆查询结果: %1",_queryResult] call OES_fnc_diagLog;
 "--------------------------------------------------" call OES_fnc_diagLog;
@@ -117,14 +114,14 @@ switch (_isInsured) do {
 	};
 };
 
+// 使用 vehicleMapper 设置车辆为激活状态
 if !(_gangID isEqualTo 0) then {
-	_query = format["UPDATE "+dbColumGangVehicle+" SET active='%1', persistentServer='0' WHERE gang_id='%2' AND id=%3",olympus_server,_gangID,_vid];
+	["setgangactive", [str _gangID, _vid, str olympus_server]] call DB_fnc_vehicleMapper;
 } else {
-	_query = format["UPDATE "+dbColumVehicle+" SET active='%1', persistentServer='0' WHERE pid='%2' AND id=%3",olympus_server,_pid,_vid];
+	["setactive", [_pid, _vid, str olympus_server]] call DB_fnc_vehicleMapper;
 };
 
 private _SpecialVehicles = ["I_Heli_Transport_02_F","O_Heli_Transport_04_F","O_Heli_Transport_04_bench_F","B_Heli_Transport_03_unarmed_F"];
-[_query,1] spawn OES_fnc_asyncCall;
 if(_sp isEqualType "") then {
 	_vehicle = createVehicle[(_vInfo select 2),[0,0,999],[],0,"NONE"];
 	waitUntil {!isNil "_vehicle" && {!isNull _vehicle}};

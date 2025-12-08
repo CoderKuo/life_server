@@ -1,9 +1,10 @@
 //	File: fn_updateRequest.sqf
 //	Author: Bryan "Tonic" Boardwine
+//	Modified: 迁移到 PostgreSQL Mapper 层
 
 //	Description:
 //	Ain't got time to describe it, READ THE FILE NAME!
-private["_uid","_side","_cash","_bank","_name","_query","_thread","_coordinates"];
+private["_uid","_side","_cash","_bank","_name","_coordinates"];
 _uid = param [0,"",[""]];
 _name = param [1,"",[""]];
 _side = param [2,sideUnknown,[civilian]];
@@ -20,16 +21,20 @@ if (_check) exitWith {};
 format["Player %1(%2) sync request. Side: %3, Cash: $%4, Bank: $%5, Position: %6",_name,_uid,_side,[_cash] call OEC_fnc_numberText,[_bank] call OEC_fnc_numberText,_coordinates] call OES_fnc_diagLog;
 
 //Parse and setup some data.
-_name = [_name] call OES_fnc_mresString; //Clense the name of bad chars.
-_name = _name splitString " " joinString " "; //Remove any extra white space from mresString, one space is fine
-_cash = [_cash] call OES_fnc_numberSafe;
-_bank = [_bank] call OES_fnc_numberSafe;
-_coordinates = [_coordinates] call OES_fnc_mresArray;
+_name = [_name] call OES_fnc_escapeString; //Clense the name of bad chars.
+_name = _name splitString " " joinString " "; //Remove any extra white space, one space is fine
+_cash = [_cash] call OES_fnc_numberToString;
+_bank = [_bank] call OES_fnc_numberToString;
+_coordinates = [_coordinates] call OES_fnc_escapeArray;
 
 switch (_side) do {
-	case west: {_query = format["UPDATE players SET name='%1', cash='%2', bankacc='%3' WHERE playerid='%4'",_name,_cash,_bank,_uid];};
-	case civilian: {_query = format["UPDATE players SET name='%1', cash='%2', bankacc='%3', "+dbColumnPosition+"='%4' WHERE playerid='%5'",_name,_cash,_bank,_coordinates,_uid];};
-	case independent: {_query = format["UPDATE players SET name='%1', cash='%2', bankacc='%3' WHERE playerid='%4'",_name,_cash,_bank,_uid];};
+	case west: {
+		["updatebasic", [_uid, _name, _cash, _bank]] call DB_fnc_playerMapper;
+	};
+	case civilian: {
+		["syncwithposition", [_uid, _name, _cash, _bank, _coordinates, dbColumnPosition]] call DB_fnc_playerMapper;
+	};
+	case independent: {
+		["updatebasic", [_uid, _name, _cash, _bank]] call DB_fnc_playerMapper;
+	};
 };
-
-_queryResult = [_query,1] call OES_fnc_asyncCall;

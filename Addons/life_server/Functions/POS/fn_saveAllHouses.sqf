@@ -1,18 +1,20 @@
 //	Author: Poseidon
 //	Description: Checks all vehicles on map, and saves those which have an owner nearby to the database so they can be spawned next restart
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_queryResult","_query","_count","_pos","_house"];
+private["_queryResult","_count","_pos","_house"];
 _tickTime = diag_tickTime;
 
-_count = ([format["SELECT COUNT(*) FROM houses WHERE owned='1' AND server='%1'",olympus_server],2] call OES_fnc_asyncCall) select 0;
+// 使用 houseMapper 获取房屋数量
+_count = (["count", [str olympus_server]] call DB_fnc_houseMapper) select 0;
 
 for [{_x=0},{_x<=_count},{_x=_x+10}] do {
-	_query = format["SELECT houses.id, houses.pos FROM houses WHERE houses.owned='1' AND server='%2' LIMIT %1,10",_x, olympus_server];
-	_queryResult = [_query,2,true] call OES_fnc_asyncCall;
+	// 使用 houseMapper 获取房屋列表
+	_queryResult = ["getall", [_x, str olympus_server]] call DB_fnc_houseMapper;
 	if(count _queryResult == 0) exitWith {};
 
 	{
-		_pos = call compile format["%1",_x select 1];
+		_pos = call compile format["%1",_x select 2];
 		_house = _pos nearestObject "House_F";
 
 		if(!isNull _house) then {

@@ -1,8 +1,9 @@
 //  File: fn_updateMember
 //	Author: Bryan "Tonic" Boardwine
 //	Description: Updates the gang information?
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_mode","_group","_groupID","_bank","_maxMembers","_members","_query","_owner","_ownerID","_gangID","_gangName","_playerID","_rank","_principal"];
+private["_mode","_group","_groupID","_bank","_maxMembers","_members","_owner","_ownerID","_gangID","_gangName","_playerID","_rank","_principal"];
 _mode = param [0,0,[0]];
 _gangID = param [2,-2,[0]];
 _gangName = param [3,"",[""]];
@@ -20,15 +21,17 @@ switch (_mode) do {
 		_principal = param [5,"",[""]];
 		if(_rank > 5) then {_rank = 5;};
 
-		_query = format["SELECT id FROM gangmembers WHERE playerid='%1'",(getPlayerUID _ownerID)];
-		_queryResult = [_query,2] call OES_fnc_asyncCall;
+		// 使用 Mapper 检查成员是否存在
+		_queryResult = ["getmember", [getPlayerUID _ownerID]] call DB_fnc_gangMapper;
 
 		[format['{"event":"Gang Invite", "player":"%1", "target":"%2", "value":"%3", "location":"%4"}',_principal,getPlayerUID _ownerID,'null','null']] call OES_fnc_logIt;
 
 		if !(count _queryResult isEqualTo 0) then {
-			_query = format["UPDATE gangmembers SET name='%1', gangname='%2', gangid='%3', rank='%4' WHERE id='%5'",_ownerID getVariable["realname",name _ownerID],_gangName,_gangID,_rank,(_queryResult select 0)];
+			// 更新成员信息
+			["updatememberfull", [str (_queryResult select 0), _ownerID getVariable["realname",name _ownerID], _gangName, str _gangID, str _rank]] call DB_fnc_gangMapper;
 		} else {
-			_query = format["INSERT INTO gangmembers (playerid,name,gangname,gangid,rank) VALUES('%1','%2','%3','%4','%5')",(getPlayerUID _ownerID),_ownerID getVariable["realname",name _ownerID],_gangName,_gangID,_rank];
+			// 添加新成员
+			["addmember", [getPlayerUID _ownerID, _ownerID getVariable["realname",name _ownerID], _gangName, str _gangID, str _rank]] call DB_fnc_gangMapper;
 		};
 	};
 
@@ -39,9 +42,11 @@ switch (_mode) do {
 		if(_rank > 5) then {_rank = 5;};
 
 		if(_rank isEqualTo -1) then {
-			_query = format["UPDATE gangmembers SET gangname='', gangid='-1', rank='-1' WHERE playerid='%1'",_playerID];
+			// 移除成员
+			["removemember", [_playerID]] call DB_fnc_gangMapper;
 		} else {
-			_query = format["UPDATE gangmembers SET gangname='%1', gangid='%2', rank='%3' WHERE playerid='%4'",_gangName,_gangID,_rank,_playerID];
+			// 更新成员
+			["updatemember", [_playerID, _gangName, str _gangID, str _rank]] call DB_fnc_gangMapper;
 		};
 	};
 
@@ -52,9 +57,11 @@ switch (_mode) do {
 		if(_rank > 5) then {_rank = 5;};
 
 		if(_rank isEqualTo -1) then {
-			_query = format["UPDATE gangmembers SET gangname='', gangid='-1', rank='-1' WHERE playerid='%1'",(getPlayerUID _ownerID)];
+			// 移除成员
+			["removemember", [getPlayerUID _ownerID]] call DB_fnc_gangMapper;
 		} else {
-			_query = format["UPDATE gangmembers SET gangname='%1', gangid='%2', rank='%3' WHERE playerid='%4'",_gangName,_gangID,_rank,(getPlayerUID _ownerID)];
+			// 更新成员
+			["updatemember", [getPlayerUID _ownerID, _gangName, str _gangID, str _rank]] call DB_fnc_gangMapper;
 		};
 		[_rank] remoteExec ["OEC_fnc_gangRanks",_ownerID,false];
 	};
@@ -62,20 +69,7 @@ switch (_mode) do {
 	case 3: {
 		//players name changed, update it so it appears correctly in gang member list
 		_ownerID = param [1,ObjNull,[ObjNull]];
-		_query = format["UPDATE gangmembers SET name='%1' WHERE playerid='%2'",_gangName,(getPlayerUID _ownerID)];
+		// 更新成员名字
+		["updatemembername", [getPlayerUID _ownerID, _gangName]] call DB_fnc_gangMapper;
 	};
 };
-
-if(!isNil "_query") then {
-	[_query,1] call OES_fnc_asyncCall;
-};
-
-//private _queryTwo = format ["SELECT id FROM gangbldgs WHERE gang_id='%1' AND gang_name='%2' AND owned='1' AND server='%3'",_gangID,_gangName,olympus_server];
-//private _queryBuilding = [_queryTwo,2] call OES_fnc_asyncCall;
-//if (count _queryBuilding isEqualTo 0) exitWith {};
-
-//private _queryThree = format ["SELECT COUNT(*) FROM gangmembers WHERE gangid='%1' AND gangname='%2'",_gangID,_gangName];
-//private _countResult = (([_queryThree,2] call OES_fnc_asyncCall) select 0);
-//if (_countResult < 8) then {
-//	[_gangID,_gangName] spawn OES_fnc_lockGangBldg;
-//};

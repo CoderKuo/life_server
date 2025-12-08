@@ -1,0 +1,35 @@
+# Compiled PBO files
+*.pbo
+*.pbo.*.bisign
+*.bisign
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Arma 3 profile data
+*.Arma3Profile
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archives
+*.zip
+*.rar
+*.7z
+
+# Temp files
+*.tmp
+*.temp
+
+# Log files
+*.log
+*.rpt

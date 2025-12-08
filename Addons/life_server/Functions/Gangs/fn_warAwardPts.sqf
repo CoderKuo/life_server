@@ -1,6 +1,7 @@
 //	File: fn_warAwardPts.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Determines number of pts to award and inserts into DB
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_killerUID","",[""]],
@@ -88,10 +89,12 @@ if (_mode in [2,3]) then {
 	if(_mode isEqualTo 3) then {
 		_victimFinal = 1;
 	};
-	[format["UPDATE players SET warpts = warpts + %2 WHERE playerid = %1",_killerUID,_killerFinal],1] spawn OES_fnc_asyncCall;
-	[format["UPDATE players SET warpts = warpts - %2 WHERE playerid = %1 AND warpts > %2",_victimUID,_victimFinal,_victimFinal],1] spawn OES_fnc_asyncCall;
+	// 使用 playerMapper 更新战争点数
+	["addwarpts", [_killerUID, str _killerFinal]] spawn DB_fnc_playerMapper;
+	["deductwarptssafe", [_victimUID, str _victimFinal]] spawn DB_fnc_playerMapper;
 } else {
-	[format["CALL setWarStats(%1,%2,%3,%4,%5,%6,%7)",_killerUID,_victimUID,_killerGID,_victimGID,_killerFinal,_victimFinal,_mode],1] spawn OES_fnc_asyncCall;
+	// 使用 gangMapper 设置战争统计
+	["setwarstats", [_killerUID, _victimUID, str _killerGID, str _victimGID, str _killerFinal, str _victimFinal, str _mode]] spawn DB_fnc_gangMapper;
 };
 if !(isNull _victim) then {
 	[[0,format["Your war points have decreased by %1 points.",_victimFinal]],"OEC_fnc_broadcast",_victim,false] spawn OEC_fnc_MP;

@@ -1,8 +1,9 @@
 //	File: fn_updateVehicleMods.sqf
 //	Author: Poseidon
 //	Description: updates the vehicles mods
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_vehicle","_insured","_color","_uid","_plate","_dbInfo","_mods","_query","_sql","_gangID"];
+private["_vehicle","_insured","_color","_uid","_plate","_dbInfo","_mods","_gangID"];
 _vehicle = param [0,objNull,[objNull]];
 _insured = param [1,0,[0]];
 _color = param [2,["Default",0],[[]]];
@@ -14,19 +15,21 @@ if(isNull _vehicle) exitWith {};
 _dbInfo = _vehicle getVariable["dbInfo",[]];
 if(count _dbInfo == 0) exitWith {};
 
-_insured = [_insured] call OES_fnc_numberSafe;
+_insured = [_insured] call OES_fnc_numberToString;
 
 _color = (str _color) splitString '""';
 _color = _color joinString "";
 
-//_color = [_color] call OES_fnc_mresArray;
-_mods = [_mods] call OES_fnc_mresArray;
+//_color = [_color] call OES_fnc_escapeArray;
+_mods = [_mods] call OES_fnc_escapeArray;
 _gangID = _vehicle getVariable ["gangID",0];
 
 _uid = _dbInfo select 0;
 _plate = _dbInfo select 1;
-_query = format["UPDATE "+dbColumVehicle+" SET insured='%1', modifications='%2', color='%3' WHERE pid='%4' AND plate='%5'",_insured,_mods,str _color,_uid,_plate];
+
+// 使用 vehicleMapper 更新车辆配置
 if !(_gangID IsEqualTo 0) then {
-	_query = format["UPDATE "+dbColumGangVehicle+" SET insured='%1', modifications='%2', color='%3' WHERE gang_id='%4' AND plate='%5'",_insured,_mods,str _color,_gangID,_plate];
+	["updategangmods", [str _gangID, str _plate, str _insured, _mods, str _color]] call DB_fnc_vehicleMapper;
+} else {
+	["updatemods", [_uid, str _plate, str _insured, _mods, str _color]] call DB_fnc_vehicleMapper;
 };
-_sql = [_query,1] call OES_fnc_asyncCall;

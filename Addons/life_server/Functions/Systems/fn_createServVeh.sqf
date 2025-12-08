@@ -1,6 +1,7 @@
 // File: fn_createServVeh.sqf
 // Author: Jesse "tkcjesse" Schultz
 // Creates what use to be a client side vehicle server side...
+// Modified: 迁移到 PostgreSQL Mapper 层
 params [
 	["_className","",[""]],
 	["_type","",[""]],
@@ -32,8 +33,23 @@ if (_check) exitWith {};
 private _check = (_side find "'" != -1);
 if (_check) exitWith {};
 
+// 使用 vehicleMapper 插入车辆
+// 参数: _side, _classname, _type, _pid, _active, _color, _plate, _mods
+private _colorStr = _color select 0;
+private _modsStr = str _defaultMods;
+diag_log format["[createServVeh] Inserting vehicle: side=%1, class=%2, type=%3, pid=%4, server=%5, color=%6, plate=%7, mods=%8", _side, _className, _type, _uid, str olympus_server, _colorStr, str _plate, _modsStr];
+diag_log format["[createServVeh] DB_fnc_vehicleMapper isNil: %1", isNil "DB_fnc_vehicleMapper"];
+diag_log format["[createServVeh] DB_fnc_vehicleMapper type: %1", typeName DB_fnc_vehicleMapper];
 
-[format ["INSERT INTO vehicles (side,classname,type,pid,alive,active,inventory,color,plate,insured,modifications) VALUES ('%1','%2','%3','%4','1','%5','""[]""','""[%6,%7]""','%8','0','""%9""')",_side,_className,_type,_uid,olympus_server,parseText(_color select 0),_color select 1,_plate,_defaultMods],1] call OES_fnc_asyncCall;
+// 直接调用 vehicleMapper
+private _insertResult = ["insert", [_side, _className, _type, _uid, str olympus_server, _colorStr, str _plate, _modsStr]] call DB_fnc_vehicleMapper;
+diag_log format["[createServVeh] After call, _insertResult isNil: %1", isNil "_insertResult"];
+if (isNil "_insertResult") then {
+	diag_log "[createServVeh] Insert result is nil!";
+} else {
+	diag_log format["[createServVeh] Insert result: %1", _insertResult];
+};
+
 private _SpecialVehicles = ["I_Heli_Transport_02_F","O_Heli_Transport_04_F","O_Heli_Transport_04_bench_F","B_Heli_Transport_03_unarmed_F"];
 
 _markerPos set [2,(_markerPos select 2) + 0.25];

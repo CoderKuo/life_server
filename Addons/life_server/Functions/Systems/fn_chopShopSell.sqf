@@ -1,6 +1,7 @@
 //	File: fn_chopShopSell.sqf
 //	Author: Bryan "Tonic" Boardwine
 //	Description: Checks whether or not the vehicle is persistent or temp and sells it.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 private["_vehicle","_isInsured","_color","_gangID"];
 params [
@@ -30,25 +31,28 @@ if (typeName _dbInfo == "ARRAY" && count _dbInfo > 0) then {
 
 	switch (_isInsured) do {
 		case 0: {
-			_query = format["UPDATE "+dbColumVehicle+" SET alive='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
+			// 无保险 - 删除车辆
 			if !(_gangID isEqualTo 0) then {
-				_query = format["UPDATE "+dbColumGangVehicle+" SET alive='0' WHERE gang_id='%1' AND plate='%2'",_gangID,_plate];
+				["sellgang", [str _gangID, str _plate]] call DB_fnc_vehicleMapper;
+			} else {
+				["sell", [_uid, str _plate]] call DB_fnc_vehicleMapper;
 			};
-			[_query,1] call OES_fnc_asyncCall;
 		};
 		case 1: {
-			_query = format["UPDATE "+dbColumVehicle+" SET active='0', insured='0', modifications='""[0,0,0,0,0,0,0,0]""', inventory='""[]""', color='""[%3,0]""', persistentServer='0' WHERE pid='%1' AND plate='%2'",_uid,_plate,parseText _color];
+			// 有保险 - 重置车辆
 			if !(_gangID isEqualTo 0) then {
-				_query = format["UPDATE "+dbColumGangVehicle+" SET active='0', insured='0', modifications='""[0,0,0,0,0,0,0,0]""', inventory='""[]""', color='""[%3,0]""', persistentServer='0' WHERE gang_id='%1' AND plate='%2'",_gangID,_plate,parseText _color];
+				["chopgang", [str _gangID, str _plate, _color]] call DB_fnc_vehicleMapper;
+			} else {
+				["chop", [_uid, str _plate, _color]] call DB_fnc_vehicleMapper;
 			};
-			[_query,1] call OES_fnc_asyncCall;
 		};
 		case 2: {
-			_query = format["UPDATE "+dbColumVehicle+" SET active='0', insured='0', inventory='""[]""', persistentServer='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
+			// 特殊保险 - 保留改装但清库存
 			if !(_gangID isEqualTo 0) then {
-				_query = format["UPDATE "+dbColumGangVehicle+" SET active='0', insured='0', inventory='""[]""', persistentServer='0' WHERE gang_id='%1' AND plate='%2'",_gangID,_plate];
+				["chopgang", [str _gangID, str _plate, _color]] call DB_fnc_vehicleMapper;
+			} else {
+				["chop", [_uid, str _plate, _color]] call DB_fnc_vehicleMapper;
 			};
-			[_query,1] call OES_fnc_asyncCall;
 		};
 	};
 };

@@ -1,4 +1,5 @@
 // File: fn_checkVehicleLimit
+// Modified: 迁移到 PostgreSQL Mapper 层
 
 private["_pid","_side","_type","_unit","_ret","_tickTime","_queryResult"];
 _pid = param [0,"",[""]];
@@ -18,10 +19,13 @@ _side = switch(_side) do {
 	default {"Error"};
 };
 
-_query = format["SELECT COUNT(id) FROM "+dbColumVehicle+" WHERE pid='%1' AND alive='1' AND side='%2'",_pid,_side];
-
 _tickTime = diag_tickTime;
-_queryResult = [_query,2,false] call OES_fnc_asyncCall;
+// 使用 vehicleMapper 统计车辆数量
+_queryResult = ["countbyplayer", [_pid, _side]] call DB_fnc_vehicleMapper;
+
+// 确保 _queryResult 是有效数组
+if (isNil "_queryResult") then { _queryResult = [0]; };
+if (!(_queryResult isEqualType []) || {count _queryResult == 0}) then { _queryResult = [0]; };
 
 if(isNull _unit) exitWith {};
 [["oev_garageCount",(_queryResult select 0)],"OEC_fnc_netSetVar",(owner _unit),false] spawn OEC_fnc_MP;

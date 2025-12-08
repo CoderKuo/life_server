@@ -1,16 +1,18 @@
 //	Author: Bryan "Tonic" Boardwine
-//	Description:
-//	Fetches all the players houses and sets them up.
+//	Description: Fetches all the players houses and sets them up.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_query","_houses","_keyPlayers"];
+private["_keyPlayers"];
 if(_this == "") exitWith {};
 
-_query = format["SELECT pid, pos, id FROM houses WHERE pid='%1' AND owned='1' AND server='%2' LIMIT 5",_this,olympus_server];
-_houses = [_query,2,true] call OES_fnc_asyncCall;
+// 使用 Mapper 获取玩家房屋
+private _houses = ["getbyplayer", [_this, str olympus_server, 5]] call DB_fnc_houseMapper;
+if (isNil "_houses" || {!(_houses isEqualType [])}) then { _houses = []; };
 
 _return = [];
 _houseIDS = [];
 {
+	if (isNil "_x" || {!(_x isEqualType [])} || {count _x < 3}) then { continue; };
 	_pos = call compile format["%1",_x select 1];
 
 	if((count (nearestObjects[_pos,["House_F"],10])) > 0) then {

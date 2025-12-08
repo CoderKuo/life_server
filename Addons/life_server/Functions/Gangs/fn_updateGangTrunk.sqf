@@ -1,6 +1,7 @@
 //	File: fn_updateGangTrunk.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Updates the gang trunk in the database.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_building",objNull,[objNull]],
@@ -24,8 +25,8 @@ if (_logOrNot) then {
 	format["Gang Building trunk updated. Building GangID: %1, Server: %5, Building Owner: %2, GangName: %3(%1) Trunk: %4",_gangID,_buildingOwner,_gangName,_trunkData,olympus_server] call OES_fnc_diagLog;
 };
 
-_trunkData = [_trunkData] call OES_fnc_mresArray;
-_physicalTrunkData = [_physicalTrunkData] call OES_fnc_mresArray;
+_trunkData = [_trunkData] call OES_fnc_escapeArray;
+_physicalTrunkData = [_physicalTrunkData] call OES_fnc_escapeArray;
 
-_query = format["UPDATE gangbldgs SET inventory='%1', physical_inventory='%5' WHERE gang_name='%2' AND gang_id='%3' AND server='%4' AND owned='1'",_trunkData,_gangName,_gangID,olympus_server,_physicalTrunkData];
-[_query,1] call OES_fnc_asyncCall;
+// 使用 Mapper 更新建筑库存
+["updatebuildinginventory", [str _gangID, _gangName, str olympus_server, _trunkData, _physicalTrunkData]] call DB_fnc_gangMapper;

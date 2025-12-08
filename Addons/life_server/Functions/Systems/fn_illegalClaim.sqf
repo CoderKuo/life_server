@@ -1,16 +1,31 @@
 //	File: fn_illegalClaim.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Switches vehicle owner in DB
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_vehicle",objNull,[objNull]],
 	["_player",objNull,[objNull]],
 	["_skins",[],[[]]],
-	["_donorLevel",0,[0]]
+	["_donorLevel",0,[0]],
+	["_price",0,[0]]
 ];
 
 if (isNull _vehicle || isNull _player || !(alive _vehicle)) exitWith {
 	"-CLAIM- A vehicle failed to claim." call OES_fnc_diagLog;
+};
+
+// 服务端金钱验证 - 防止客户端作弊
+private _ownerID = owner _player;
+private _atmcash = _player getVariable ["oev_atmcash", 0];
+if (_price <= 0) exitWith {
+	format ["-CLAIM- Invalid price %1 for player %2", _price, name _player] call OES_fnc_diagLog;
+	[["life_claim_done",true],"OEC_fnc_netSetVar",_ownerID,false] spawn OEC_fnc_MP;
+};
+if (_atmcash < _price) exitWith {
+	format ["-CLAIM- Player %1 has insufficient funds (has: %2, needs: %3)", name _player, _atmcash, _price] call OES_fnc_diagLog;
+	[[1,"您的银行余额不足!"],"OEC_fnc_broadcast",_ownerID,false] spawn OEC_fnc_MP;
+	[["life_claim_done",true],"OEC_fnc_netSetVar",_ownerID,false] spawn OEC_fnc_MP;
 };
 
 private _vInfo = _vehicle getVariable ["dbInfo",[]];
@@ -45,11 +60,14 @@ if (isNull _vehicle || !(alive _vehicle) || !(alive _player)) exitWith {
 private _pos = getPos _vehicle;
 private _dir = getDir _vehicle;
 private _gangID = _vehicle getVariable ["gangID",0];
-private _query = format ["SELECT CONVERT(id, char) FROM %1 WHERE pid='%2' AND active='%3'",dbColumVehicle,_uid,olympus_server];
+
+// 使用 vehicleMapper 获取车辆信息
+private _vInformation = [];
 if !(_gangID isEqualTo 0) then {
-	_query = format ["SELECT CONVERT(id, char), side, classname, type, plate FROM gangvehicles WHERE gang_id='%1' AND active='%2' AND plate='%3'",_gangID,olympus_server,_plate];
+	_vInformation = ["getgangactiveid", [str _gangID, str olympus_server, _plate]] call DB_fnc_vehicleMapper;
+} else {
+	_vInformation = ["getactiveid", [_uid, str olympus_server]] call DB_fnc_vehicleMapper;
 };
-private _vInformation = [_query,2] call OES_fnc_asyncCall;
 private _vid = (_vInformation select 0);
 
 //Prevent non donors claiming donor skins
@@ -74,25 +92,30 @@ if ((_vehicle getVariable ["side",""]) == "cop") then {
 if (_color isEqualType 0) then {_color = str _color};
 deleteVehicle _vehicle;
 
-_query = format ["UPDATE %1 SET active='0', persistentServer='0', pid='%2', color='""[%5,0]""', side='civ' WHERE pid='%3' AND plate='%4'",dbColumVehicle,_claimerUID,_uid,_plate,parseText _color];
+// 使用 vehicleMapper 处理车辆认领
 if !(_gangID isEqualTo 0) then {
-	//Kill the vehicle in the gang's garage
-	_query = format ["UPDATE gangvehicles SET active='0', persistentServer='0', alive='0' WHERE gang_id='%1' AND plate='%2'",_gangID,_plate];
-	[_query,1] call OES_fnc_asyncCall;
+	// 杀死帮派车库中的车辆
+	["markgangdead", [str _gangID, _plate]] call DB_fnc_vehicleMapper;
 	uiSleep 0.5;
-	//Add the vehicle to the claimer's garage
-	_query = format["INSERT INTO "+dbColumVehicle+" (side, classname, type, pid, alive, active, inventory, color, plate, insured, modifications) VALUES ('%1', '%2', '%3', '%4', '1','%5','""[]""', '""[%6,0]""', '%7', '0', '""[0,0,0,0,0,0,0,0]""')",_vInformation select 1,_vInformation select 2,_vInformation select 3,_claimerUID,0,parseText _color,_vInformation select 4];
-	[_query,1] call OES_fnc_asyncCall;
+	// 将车辆添加到认领者的车库
+	["insert", [_vInformation select 1, _vInformation select 2, _vInformation select 3, _claimerUID, "0", parseText _color, _vInformation select 4, "[0,0,0,0,0,0,0,0]"]] call DB_fnc_vehicleMapper;
 	uiSleep 0.5;
-	//Get the new vid from the vehicle database
-	_query = format ["SELECT CONVERT(id, char) FROM %1 WHERE pid='%2' AND active='%3' AND alive='1' AND plate='%4'",dbColumVehicle,_claimerUID,0,_vInformation select 4];
+	// 从车辆数据库获取新的 vid
 	uiSleep 1;
-	_vid = ([_query,2] call OES_fnc_asyncCall) select 0;
+	_vid = (["getbypidplate", [_claimerUID, "0", _vInformation select 4]] call DB_fnc_vehicleMapper) select 0;
 } else {
-	[_query,1] call OES_fnc_asyncCall;
+	["claim", [_claimerUID, _uid, _plate, parseText _color]] call DB_fnc_vehicleMapper;
 };
 
 uiSleep 2;
+
+// 服务端扣除金钱 - 在成功认领后扣除
+private _newAtmcash = _atmcash - _price;
+private _newCacheAtmcash = (_player getVariable ["oev_cache_atmcash", 0]) - _price;
+["oev_atmcash", _newAtmcash] remoteExec ["OEC_fnc_netSetVar", (owner _player), false];
+["oev_cache_atmcash", _newCacheAtmcash] remoteExec ["OEC_fnc_netSetVar", (owner _player), false];
+format ["-CLAIM- Deducted $%1 from player %2 for vehicle claim", _price, name _player] call OES_fnc_diagLog;
+
 [[_vid,_claimerUID,_pos,_player,0,_dir],"OES_fnc_spaw1nVehicle",false,false] spawn OEC_fnc_MP;
 [["life_claim_success",true],"OEC_fnc_netSetVar",(owner _player),false] spawn OEC_fnc_MP;
 [["life_claim_done",true],"OEC_fnc_netSetVar",(owner _player),false] spawn OEC_fnc_MP;

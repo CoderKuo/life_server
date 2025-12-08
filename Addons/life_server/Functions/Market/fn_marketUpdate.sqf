@@ -1,6 +1,8 @@
 // File: fn_marketUpdate.sqf
 // Author: Jesse "tkcjesse" Schultz
 // Description: Triggered by fn_marketCache.sqf
+// Modified: 迁移到 PostgreSQL Mapper 层
+
 uiSleep 240;
 uiSleep round(random(120));
 
@@ -39,6 +41,5 @@ private ["_cfgArr","_index","_curPrice","_tmp","_tmpDecrease","_handle","_curAdj
 
 publicVariable "serv_market_current";
 
-private _tmpArray = [serv_market_db] call OES_fnc_mresArray;
-private _query = format ["UPDATE market SET market_array='%1' WHERE id='%2'",serv_market_db,olympus_market];
-[_query,1] call OES_fnc_asyncCall;
+// 使用 marketMapper 更新市场数组
+["updatearray", [str olympus_market, str serv_market_db]] call DB_fnc_marketMapper;

@@ -1,39 +1,32 @@
 //	Author: Poseidon
 //	Description: Loads all persistent vehicles
 //  File: fn_persistentVehiclesLoad.sqf
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_query","_queryResult","_new","_vehicleID","_side","_className","_type","_playerID","_plate","_color","_insured","_mods","_position","_direction","_name","_vehicle","_spawnedVehicles","_tickTime","_turbo","_inventory","_string"];
+private["_queryResult","_new","_vehicleID","_side","_className","_type","_playerID","_plate","_color","_insured","_mods","_position","_direction","_name","_vehicle","_spawnedVehicles","_tickTime","_turbo","_inventory","_string"];
 
 _spawnedVehicles = [];
 _tickTime = diag_tickTime;
-_query = format["SELECT CONVERT(id, char), side, classname, type, pid, alive, active, plate, color, inventory, insured, modifications, persistentPosition, persistentDirection FROM "+dbColumVehicle+" WHERE alive='1' AND (active='0' OR active='%1') AND persistentServer='%1' AND side='%2'", olympus_server, "civ"];
-_queryResult = [_query,2,true] call OES_fnc_asyncCall;
+
+// 使用 vehicleMapper 获取持久化车辆
+_queryResult = ["getpersistent", [str olympus_server, "civ"]] call DB_fnc_vehicleMapper;
+if (isNil "_queryResult" || {!(_queryResult isEqualType [])} || {count _queryResult == 0}) then {
+	_queryResult = [];
+	"[persistentVehiclesLoad] 没有持久化车辆数据" call OES_fnc_diagLog;
+};
 
 {
-	//color & material array [color,material]
-	_string = (_x select 8);
-	_new = _string splitString "[,]";
-	_new = [_new select 0, call compile (_new select 1)];
-	if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-	_x set[8,_new];
+	if (isNil "_x" || {!(_x isEqualType [])} || {count _x < 14}) then { continue; };
 
-	//vehicle gear/virtual inventory, not yet fully implemented, but fetch it anyways
-	_new = [(_x select 9)] call OES_fnc_mresToArray;
-	if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-	_x set[9,_new];
-
-	//modification array, will contain values for each modification like armor, turbo, etc, max mods currently is 8
-	_new = [(_x select 11)] call OES_fnc_mresToArray;
-	if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-	_x set[11,_new];
-
-	//format position data
-	_new = [(_x select 12)] call OES_fnc_mresToArray;
-	if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-	_x set[12,_new];
+	// 解析 JSONB 数据
+	_x set [8, [_x select 8, ["", 0]] call DB_fnc_parseJsonb];
+	_x set [9, [_x select 9, [[], 0]] call DB_fnc_parseJsonb];
+	_x set [11, [_x select 11, [0,0,0,0,0,0,0,0]] call DB_fnc_parseJsonb];
+	_x set [12, [_x select 12, [0, 0, 0]] call DB_fnc_parseJsonb];
 } forEach _queryResult;
 
 {
+	if (isNil "_x" || {!(_x isEqualType [])} || {count _x < 14}) then { continue; };
 	_vehicleID = _x select 0;
 	_side = _x select 1;
 	_className = _x select 2;
@@ -47,7 +40,9 @@ _queryResult = [_query,2,true] call OES_fnc_asyncCall;
 	_position = _x select 12;
 	_position set[2, (_position select 2) + 2];
 	_direction = _x select 13;
-	_name = [format["SELECT name FROM players WHERE playerid='%1'", _playerID],2] call OES_fnc_asyncCall;
+	// 使用 playerMapper 获取玩家名称
+	_name = ["exists", [_playerID]] call DB_fnc_playerMapper;
+	if (count _name > 0) then { _name = (_name select 0) select 1; } else { _name = "Unknown"; };
 
 	if(count _inventory == 0) then {
 		_inventory = [[],0];
@@ -88,8 +83,8 @@ _queryResult = [_query,2,true] call OES_fnc_asyncCall;
 		}];
 	};
 
-	_query = format["UPDATE "+dbColumVehicle+" SET active='%1', persistentServer='%2', persistentPosition='%3', persistentDirection='%4' WHERE pid='%5' AND id=%6",olympus_server, 0, [[0,0,0]] call OES_fnc_mresArray, 0,_playerID,_vehicleID];
-	[_query,1] spawn OES_fnc_asyncCall;
+	// 使用 vehicleMapper 更新持久化状态
+	["updatepersistent", [_playerID, _vehicleID, str olympus_server, "0", [[0,0,0]] call OES_fnc_escapeArray, "0"]] call DB_fnc_vehicleMapper;
 
 	_spawnedVehicles pushBack _vehicle;
 
@@ -193,8 +188,8 @@ _spawnedVehicles spawn {
 
 			deleteVehicle _vehicle;
 
-			_query = format["UPDATE "+dbColumVehicle+" SET active='0' inventory='%4', persistentServer='0' WHERE pid='%1' AND plate='%2' AND classname='%3'",_playerID,_plate,_className, [[[],0]] call OES_fnc_mresArray];
-			[_query,1] call OES_fnc_asyncCall;
+			// 使用 vehicleMapper 更新库存和持久化状态
+			["updateinventory", [_playerID, _plate, _className, [[[],0]] call OES_fnc_escapeArray, "0", [[0,0,0]] call OES_fnc_escapeArray, "0"]] call DB_fnc_vehicleMapper;
 		};
 	} forEach _this;
 };

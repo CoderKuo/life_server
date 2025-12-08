@@ -3,6 +3,7 @@
 //	Description:
 //	Doesn't actually delete since we don't give our DB user that type of
 //	access so instead we set it to alive=0 so it never shows again.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 params [
 	["_vid","",[""]],
 	["_pid","",[""]],
@@ -18,4 +19,5 @@ if (_check) exitWith {};
 
 if(_vid isEqualTo "" || {_pid isEqualTo ""} || {_sp isEqualTo 0} || {isNull _unit} || {_type isEqualTo ""}) exitWith {};
 
-[(format["UPDATE vehicles SET alive='0' WHERE pid='%1' AND id=%2",_pid,_vid]),1] call OES_fnc_asyncCall;
+// 使用 vehicleMapper 删除车辆
+["deletebyid", [_pid, _vid]] call DB_fnc_vehicleMapper;

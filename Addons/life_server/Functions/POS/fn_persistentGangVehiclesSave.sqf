@@ -1,7 +1,8 @@
 //	Author: Poseidon
 //	Description: Checks all vehicles on map, and saves those which have an owner nearby to the database so they can be spawned next restart
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_dbInfo","_vehicle","_plate","_className","_position","_direction","_query","_side","_tickTime","_trunkData","_gangID","_player","_savedOwners","_nearby"];
+private["_dbInfo","_vehicle","_plate","_className","_position","_direction","_side","_tickTime","_trunkData","_gangID","_player","_savedOwners","_nearby"];
 _savedOwners = 0;
 _tickTime = diag_tickTime;
 _nearby = false;
@@ -32,10 +33,10 @@ _nearby = false;
 		if !(_nearby) exitWith {};
 		_vehicle setVariable ["trunkLocked",true,true];
 		_trunkData = _vehicle getVariable["Trunk",[[],0]];
-		_trunkData = [_trunkData] call OES_fnc_mresArray;
+		_trunkData = [_trunkData] call OES_fnc_escapeArray;
 
-		_query = format["UPDATE "+dbColumGangVehicle+" SET inventory='%1', persistentServer='%2', persistentPosition='%3', persistentDirection='%4' WHERE gang_id='%5' AND plate='%6' AND classname='%7'", _trunkData, olympus_server, _position, _direction, _gangID, _plate, _className];
-		[_query,1] call OES_fnc_asyncCall;
+		// 使用 vehicleMapper 更新帮派车辆库存和持久化状态
+		["updateganginventory", [str _gangID, _plate, _className, _trunkData, str olympus_server, [_position] call OES_fnc_escapeArray, str _direction]] call DB_fnc_vehicleMapper;
 		_savedOwners = _savedOwners + 1;
 	};
 } forEach vehicles;

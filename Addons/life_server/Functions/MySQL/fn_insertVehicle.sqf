@@ -1,10 +1,11 @@
 //	File: fn_insertVehicle.sqf
 //	Author: Bryan "Tonic" Boardwine
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 //	Description:
 //	Inserts the vehicle into the database
 
-private["_uid","_side","_type","_className","_color","_plate","_query","_sql","_spawnInGarage"];
+private["_uid","_side","_type","_className","_color","_plate","_spawnInGarage"];
 
 _uid = param [0,"",[""]];
 _side = param [1,"",[""]];
@@ -28,13 +29,13 @@ if (_check) exitWith {};
 if (_color isEqualType 0) then {_color = str _color};
 //Stop bad data being passed.
 if(_uid == "" || _side == "" || _type == "" || _className == "" || _color isEqualTo -2 || _plate == -1) exitWith {};
-if !(_spawnInGarage) then {
-	_query = format["INSERT INTO "+dbColumVehicle+" (side, classname, type, pid, alive, active, inventory, color, plate, insured, modifications) VALUES ('%1', '%2', '%3', '%4', '1','%5','""[]""', '""[%6,0]""', '%7', '0', '""%8""')",_side,_className,_type,_uid,olympus_server,parseText _color,_plate,_mods];
-} else {
-	_query = format["INSERT INTO "+dbColumVehicle+" (side, classname, type, pid, alive, active, inventory, color, plate, insured, modifications) VALUES ('%1', '%2', '%3', '%4', '1','0','""[]""', '""[%5,0]""', '%6', '0', '""%7""')",_side,_className,_type,_uid,parseText _color,_plate,_mods];
-};
 
+// 使用 vehicleMapper 插入车辆
 if !(_gangID isEqualTo 0) then {
-	_query = format["INSERT INTO "+dbColumGangVehicle+" (side, classname, type, gang_id, alive, active, inventory, color, plate, insured, modifications) VALUES ('%1', '%2', '%3', '%4', '1','%5','""[]""', '""[%6,0]""', '%7', '0', '""%8""')",_side,_className,_type,_gangID,0,parseText _color,_plate,_mods];
+	// 帮派车辆
+	["insertgang", [_side, _className, _type, str _gangID, "0", parseText _color, str _plate, str _mods]] call DB_fnc_vehicleMapper;
+} else {
+	// 个人车辆
+	private _active = if (_spawnInGarage) then { "0" } else { str olympus_server };
+	["insert", [_side, _className, _type, _uid, _active, parseText _color, str _plate, str _mods]] call DB_fnc_vehicleMapper;
 };
-[_query,1] call OES_fnc_asyncCall;

@@ -1,5 +1,6 @@
 // File: fn_initMarket.sqf
 // Author: Jesse "tkcjesse" Schultz
+// Modified: 迁移到 PostgreSQL Mapper 层
 
 // DB Array: [0,32,48,94,94,290,320,928,620,0,1229,1725,1164,1349,1280,1313,1441,2268,1630,0,1976,1837,2581,2115,2255,7980,8406,8820,55250] <- Contains dividers
 // serv_market_current: [current price, price adjustments] <- change amount adjusts as sales occur, set to zero on reset enabled (dynamic)
@@ -7,18 +8,33 @@
 // serv_market_storage: [variableName, current price] <- current price change as things are sold
 // serv_market_config: [variable name, lowest possible, highest possible, legality, decrease percent, increase percent]
 
-private _query = format ["SELECT market_array FROM market WHERE id='%1'",olympus_market];
-private _queryResult = [_query,2,true] call OES_fnc_asyncCall;
-private _priceArr = call compile format ["%1",((_queryResult select 0) select 0)];
-
-_query = format ["SELECT reset FROM market WHERE id='%1'",olympus_market];
-_queryResult = [_query,2] call OES_fnc_asyncCall;
-private _reset = if ((_queryResult select 0) isEqualTo 1) then {true} else {false};
-
+// 使用 marketMapper 获取市场数据
+private _queryResult = ["getarray", [str olympus_market]] call DB_fnc_marketMapper;
 "------------- Market Query Request -------------" call OES_fnc_diagLog;
-format ["Query: %1",_query] call OES_fnc_diagLog;
-format ["Market Query Result: %1",_priceArr] call OES_fnc_diagLog;
-format ["Market Reset Requested: %1",_reset] call OES_fnc_diagLog;
+format ["Method: getarray | Raw Result: %1", _queryResult] call OES_fnc_diagLog;
+
+private _priceArr = [];
+if (!isNil "_queryResult" && {_queryResult isEqualType []} && {count _queryResult > 0}) then {
+	private _firstResult = _queryResult select 0;
+	if (!isNil "_firstResult" && {_firstResult isEqualType []}) then {
+		_priceArr = call compile format ["%1", _firstResult select 0];
+	} else {
+		if (!isNil "_firstResult" && {_firstResult isEqualType ""}) then {
+			_priceArr = call compile _firstResult;
+		};
+	};
+};
+if (isNil "_priceArr" || {!(_priceArr isEqualType [])}) then { _priceArr = []; };
+
+private _resetResult = ["getreset", [str olympus_market]] call DB_fnc_marketMapper;
+private _reset = false;
+if (!isNil "_resetResult" && {_resetResult isEqualType []} && {count _resetResult > 0}) then {
+	private _resetVal = _resetResult select 0;
+	_reset = if (!isNil "_resetVal" && {_resetVal isEqualTo 1}) then { true } else { false };
+};
+
+format ["Market Query Result: %1", _priceArr] call OES_fnc_diagLog;
+format ["Market Reset Requested: %1", _reset] call OES_fnc_diagLog;
 "------------------------------------------------" call OES_fnc_diagLog;
 
 serv_market_current = [];
@@ -113,11 +129,14 @@ if !(olympus_server isEqualTo 4) then {
 };
 
 
-if (_reset) then {
+if (_reset || {count _priceArr == 0}) then {
 	if !(olympus_server isEqualTo 4) then {
 		_priceArr = [0,124,188,141,141,435,480,1392,930,0,1229,1725,1280,1349,1280,1313,1441,2268,1630,0,1976,1837,2581,2115,2255,7980,8406,8820,30000,69063];
 	} else {
 		_priceArr = [0,32,48,94,94,290,320,928,620,0,1725,3650,2500,0,1976,3500,3000,9850,8406,69063];
+	};
+	if (count _priceArr == 0) then {
+		"[initMarket] 使用默认市场价格" call OES_fnc_diagLog;
 	};
 };
 
@@ -133,7 +152,7 @@ publicVariable "serv_market_current";
 publicVariable "serv_market_config";
 
 if (_reset) then {
-	_priceArr = [_priceArr] call OES_fnc_mresArray;
-	_query = format["UPDATE market SET reset='0', market_array='%1' WHERE id='%2'",_priceArr,olympus_market];
-	[_query,1] call OES_fnc_asyncCall;
+	_priceArr = [_priceArr] call OES_fnc_escapeArray;
+	// 使用 marketMapper 重置市场
+	["resetmarket", [str olympus_market, _priceArr]] call DB_fnc_marketMapper;
 };

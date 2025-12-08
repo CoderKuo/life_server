@@ -1,7 +1,7 @@
 //  File: fn_gangBank
 //	Author: Poseidon
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_query"];
 params [
 	["_mode",0,[0]],
 	["_gangID",-1,[0]],
@@ -16,8 +16,8 @@ if(isNull _unit || _gangID isEqualTo -1) exitWith {};
 
 switch (_mode) do {
 	case 0: {
-		_query = format["SELECT bank FROM gangs WHERE id='%1'",_gangID];
-		_queryResult = [_query,2] call OES_fnc_asyncCall;
+		// 获取帮派银行余额
+		_queryResult = ["getgangbank", [str _gangID]] call DB_fnc_gangMapper;
 
 		["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _unit),false];
 		["oev_gangfund_ready",true] remoteExec ["OEC_fnc_netSetVar",(owner _unit),false];
@@ -32,13 +32,15 @@ switch (_mode) do {
 			uiSleep round(random(3));
 		};
 
-		_query = format["SELECT bank FROM gangs WHERE id='%1'",_gangID];
-		_queryResult = [_query,2] call OES_fnc_asyncCall;
+		// 获取帮派银行余额
+		_queryResult = ["getgangbank", [str _gangID]] call DB_fnc_gangMapper;
 
 		if(((_queryResult select 0) + _change) >= 0) then {
 			if(isNull _unit) exitWith {};
 
-			_query = format["UPDATE gangs SET bank='%1' WHERE id='%2'",((_queryResult select 0) + _change),_gangID];
+			private _newBalance = (_queryResult select 0) + _change;
+			// 更新帮派银行
+			["updategangbank", [str _gangID, str _newBalance]] call DB_fnc_gangMapper;
 
 			if(_change > 0) then {
 				[
@@ -52,8 +54,8 @@ switch (_mode) do {
 					["new_player_cash",_cash - _change]
 				] call OES_fnc_logIt;
 
-				private _logHistory = format ["INSERT INTO gangbankhistory (name,playerid,type,amount,gangid) VALUES('%1','%2','1','%3','%4')",name _unit,getPlayerUID _unit,_change,_gangID];
-				[_logHistory,1] call OES_fnc_asyncCall;
+				// 记录历史
+				["addbankhistory", [name _unit, getPlayerUID _unit, "1", str _change, str _gangID]] call DB_fnc_gangMapper;
 			} else {
 				[
 					["event","Gang Bank Withdraw"],
@@ -66,11 +68,9 @@ switch (_mode) do {
 					["new_player_cash",_cash - _change]
 				] call OES_fnc_logIt;
 
-				private _logHistory = format ["INSERT INTO gangbankhistory (name,playerid,type,amount,gangid) VALUES('%1','%2','2','%3','%4')",name _unit,getPlayerUID _unit,(_change * -1),_gangID];
-				[_logHistory,1] call OES_fnc_asyncCall;
+				// 记录历史
+				["addbankhistory", [name _unit, getPlayerUID _unit, "2", str (_change * -1), str _gangID]] call DB_fnc_gangMapper;
 			};
-
-			[_query,1] call OES_fnc_asyncCall;
 
 			if(isNull _unit) exitWith {};
 			if(_change <= 0) then {
@@ -94,8 +94,8 @@ switch (_mode) do {
 	case 2: {
 		if(isNull _unit) exitWith {};
 
-		_query = format["SELECT bank FROM gangs WHERE id='%1'",_gangID];
-		_queryResult = [_query,2] call OES_fnc_asyncCall;
+		// 获取帮派银行余额
+		_queryResult = ["getgangbank", [str _gangID]] call DB_fnc_gangMapper;
 
 		if(_change > 0) then {
 			if (_armsTax) then {
@@ -108,9 +108,9 @@ switch (_mode) do {
 		};
 
 		if(((_queryResult select 0) + _change) >= 0) then {
-			_query = format["UPDATE gangs SET bank='%1' WHERE id='%2'",((_queryResult select 0) + _change),_gangID];
-
-			[_query,1] call OES_fnc_asyncCall;
+			private _newBalance = (_queryResult select 0) + _change;
+			// 更新帮派银行
+			["updategangbank", [str _gangID, str _newBalance]] call DB_fnc_gangMapper;
 		};
 	};
 };

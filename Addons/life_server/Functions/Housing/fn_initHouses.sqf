@@ -1,15 +1,25 @@
 //  File: fn_initHouses.sqf
 //	Author: Bryan "Tonic" Boardwine
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_queryResult","_query","_count","_keyPlayers","_storageCapacity","_trunk","_physicalTrunk","_physicalStorageCapacity"];
-_count = ([format["SELECT COUNT(*) FROM houses WHERE owned='1' AND server='%1'",olympus_server],2] call OES_fnc_asyncCall) select 0;
+private["_queryResult","_keyPlayers","_storageCapacity","_trunk","_physicalTrunk","_physicalStorageCapacity"];
+
+// 获取房屋总数
+private _countResult = ["count", [str olympus_server]] call DB_fnc_houseMapper;
+if (isNil "_countResult" || {count _countResult == 0} || {isNil {_countResult select 0}}) exitWith {
+	"[initHouses] 无法获取房屋数量" call OES_fnc_diagLog;
+};
+private _count = _countResult select 0;
+if (isNil "_count" || {_count isEqualType ""}) then { _count = parseNumber str _count; };
+format["[initHouses] 房屋总数: %1", _count] call OES_fnc_diagLog;
 
 for [{_x=0},{_x<=_count},{_x=_x+10}] do {
-	_query = format["SELECT houses.id, houses.pid, houses.pos, players.name, houses.player_keys, houses.inventory, houses.storageCapacity, houses.inAH, houses.oil, houses.physical_inventory, houses.physicalStorageCapacity, DATEDIFF(houses.expires_on, TIMESTAMP(CURRENT_DATE())) FROM houses INNER JOIN players ON houses.pid=players.playerid WHERE houses.owned='1' AND server='%2' LIMIT %1,10",_x,olympus_server];
-	_queryResult = [_query,2,true] call OES_fnc_asyncCall;
-	if(count _queryResult == 0) exitWith {};
+	// 使用 Mapper 获取所有房屋 (PostgreSQL 原生语法)
+	_queryResult = ["getall", [_x, str olympus_server]] call DB_fnc_houseMapper;
+	if (isNil "_queryResult" || {count _queryResult == 0}) exitWith {};
 
 	{
+		if (isNil "_x" || {!(_x isEqualType [])} || {count _x < 12}) then { continue; };
 		_pos = call compile format["%1",_x select 2];
 		_house = _pos nearestObject "House_F";
 
@@ -20,32 +30,25 @@ for [{_x=0},{_x<=_count},{_x=_x+10}] do {
 			_house setVariable["house_id",_x select 0,true];
 			_house setVariable["locked",true,true];
 			_house setVariable["house_expire",(_x select 11),true];
-			//_house setVariable["for_sale","",true];
 			if ((_x select 7) isEqualTo 0) then {
 				_house setVariable["for_sale","",true];
 			} else {
 				_house setVariable["for_sale",[_x select 1,_x select 7],true];
 			};
-			//if ((_x select 7) isEqualTo 0) then {
-			//	_house setVariable ["inAH",false,true];
-			//} else {
-			//	_house setVariable ["inAH",true,true];
-			//};
 
-			_keyPlayers = [_x select 4] call OES_fnc_mresToArray;
-			if(_keyPlayers isEqualType "") then {_keyPlayers = call compile _keyPlayers;};
-
+			// 解析钥匙玩家数据 - 从 JSONB 返回 SQF 格式字符串
+			private _keyPlayers = [_x select 4, []] call DB_fnc_parseJsonb;
 			_house setVariable["keyPlayers",_keyPlayers,true];
 
 			_storageCapacity = 100;
 			_physicalStorageCapacity = 100;
 
-			_trunk = [_x select 5] call OES_fnc_mresToArray;
-			_physicalTrunk = [_x select 9] call OES_fnc_mresToArray;
+			// 解析库存数据 - 从 JSONB 返回 SQF 格式字符串
+			private _trunk = [_x select 5, [[], 0]] call DB_fnc_parseJsonb;
+			private _physicalTrunk = [_x select 9, [[], 0]] call DB_fnc_parseJsonb;
+
 			_storageCapacity = _x select 6;
 			_physicalStorageCapacity = _x select 10;
-			if(_trunk isEqualType "") then {_trunk = call compile format["%1", _trunk];};
-			if(_physicalTrunk isEqualType "") then {_physicalTrunk = call compile format["%1", _physicalTrunk];};
 			_house setVariable["Trunk",_trunk,true];
 			_house setVariable["PhysicalTrunk",_physicalTrunk,true];
 

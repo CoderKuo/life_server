@@ -1,5 +1,6 @@
 //	File: fn_handleMessages.sqf
 //	Author: Silex
+//  Modified: 迁移到 PostgreSQL Mapper 层
 params [
 	["_target",objNull,[objNull]],
 	["_msg","",[""]],
@@ -24,9 +25,10 @@ switch(_type) do {
 		if(isNULL _target)  exitWith {};
 		private _to = call compile format["%1", _target];
 		[_msg,name _player,0,_player] remoteExec ["OEC_fnc_clientMessage",_to,false];
-		private _query = format["INSERT INTO messages (fromID, toID, message, fromName, toName) VALUES('%1', '%2', '""%3""', '%4', '%5')",(getPlayerUID _player),(getPlayerUID _target),[_msg] call OES_fnc_mresString,(name _player),(name _target)];
-		format ["Text Message Query: %1",_query] call OES_fnc_diagLog;
-		[_query,1] call OES_fnc_asyncCall;
+		// 使用 messageMapper 插入消息
+		private _escapedMsg = [_msg] call OES_fnc_escapeString;
+		format ["Text Message: from %1 to %2", name _player, name _target] call OES_fnc_diagLog;
+		["insert", [getPlayerUID _player, getPlayerUID _target, _escapedMsg, name _player, name _target]] call DB_fnc_messageMapper;
 	};
 	//message to cops
 	case 1: {

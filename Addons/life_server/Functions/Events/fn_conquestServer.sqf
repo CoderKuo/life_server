@@ -1,5 +1,6 @@
 // File: fn_conquestServer.sqf
 // Author: Civak
+// Modified: 迁移到 PostgreSQL Mapper 层
 
 private ["_fnc_autoStart","_fnc_cleanup","_fnc_checkWin","_fnc_deathPrice","_zones","_markName","_startX","_startY","_endX","_endY","_endIdx","_lineName","_flag","_buildings","_veh","_vehicleClass","_units","_lockedChop"];
 params [
@@ -267,7 +268,9 @@ _fnc_autoStart = {
 
 	[] call _lcl_cleanMarkers;
 
-	[6, format ["征服区被: %1", ([format["SELECT `name` FROM `gangs` WHERE `id`=%1", _sortedScores select 0 select 0], 2] call OES_fnc_asyncCall) select 0]] remoteExec ["OEC_fnc_broadcast", civilian];
+	// 使用 conquestMapper 获取获胜帮派名称
+	private _winnerName = (["getwinnername", [str (_sortedScores select 0 select 0)]] call DB_fnc_conquestMapper) select 0;
+	[6, format ["征服区被: %1", _winnerName]] remoteExec ["OEC_fnc_broadcast", civilian];
 
 	[] spawn{
 		uiSleep 300;
@@ -275,8 +278,9 @@ _fnc_autoStart = {
 		publicVariable "oev_conqChop";
 	};
 
-	[format["INSERT INTO `conquests` (`server`,`pot`,`total_points`,`winner_id`) VALUES (%1,%2,%3,%4)", olympus_server, oev_conquestData select 4, _totalScores, _sortedScores select 0 select 0], 2] call OES_fnc_asyncCall;
-	private _conqId = ([format["SELECT MAX(`id`) FROM `conquests` WHERE `server`=%1", olympus_server], 2] call OES_fnc_asyncCall) select 0;
+	// 使用 conquestMapper 插入征服记录
+	["insertconquest", [str olympus_server, str (oev_conquestData select 4), str _totalScores, str (_sortedScores select 0 select 0)]] call DB_fnc_conquestMapper;
+	private _conqId = (["getlatestid", [str olympus_server]] call DB_fnc_conquestMapper) select 0;
 	if !(_conqId isEqualType "" || _totalScores < 1) then {
 		private _valueStr = "";
 		private _award = 0;
@@ -319,7 +323,8 @@ _fnc_autoStart = {
 				_idx = _gangIDs find _gid;
 				if(_idx >= 0 && _gid in _gangIDs && (_payouts select _idx) > 0 && _idx < count _gangPlayerCounts) then {
 					_amount = (_payouts select _idx) / (_gangPlayerCounts select _idx);
-					[format["UPDATE `players` SET `deposit_box`=`deposit_box`+%1 WHERE `playerid`='%2'",_amount,_pid],1] call OES_fnc_asyncCall;
+					// 使用 playerMapper 更新存款箱
+					["updatedepositbox", [_pid, _amount]] call DB_fnc_playerMapper;
 					[
 						["event","Conquest Deposit"],
 						["value",_amount],
@@ -335,7 +340,8 @@ _fnc_autoStart = {
 
 		_valueStr = _valueStr select [0, count(_valueStr) - 1];
 		if (count _valueStr > 0) then {
-			[format["INSERT INTO `conquest_gangs` (`conquest_id`,`gang_id`,`points`,`payout`) VALUES %1", _valueStr], 1] spawn OES_fnc_asyncCall;
+			// 使用 conquestMapper 插入帮派记录
+			["insertgangs", [_valueStr]] call DB_fnc_conquestMapper;
 		};
 	};
 	[_flag, oev_conquestServ,oev_conquestData] spawn _fnc_cleanup;
@@ -351,15 +357,15 @@ _fnc_autoStart = {
 			} else {
 				oev_lastConquest = -1;
 				publicVariable "oev_lastConquest";
-				_query = format["UPDATE conquest_schedule SET cancelled=1 WHERE id=%1 AND server=%2",_ID,olympus_server];
-				[_query,1] call OES_fnc_asyncCall;
+				// 使用 conquestMapper 设置取消状态
+				["setcancelled", [str _ID, str olympus_server]] call DB_fnc_conquestMapper;
 			};
 		} else {
 			oev_secondConq = false;
 			oev_lastConquest = -1;
 			publicVariable "oev_lastConquest";
-			_query = format["UPDATE conquest_schedule SET completed=1 WHERE id=%1 AND server=%2",_ID,olympus_server];
-			[_query,1] call OES_fnc_asyncCall;
+			// 使用 conquestMapper 设置完成状态
+			["setcompleted", [str _ID, str olympus_server]] call DB_fnc_conquestMapper;
 		};
 	};
 

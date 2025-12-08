@@ -1,6 +1,7 @@
 //	File: fn_lockGangBldg.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Locks out a gang building due to not enough members.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_gangID",-2,[0]],
@@ -11,8 +12,8 @@ if (_gangID < 0 || _gangName isEqualTo "") exitWith {};
 private _check = (_gangName find "'" != -1);
 if (_check) exitWith {};
 
-private _query = format  ["SELECT id, pos, classname, gang_name FROM gangbldgs WHERE gang_id='%1' AND gang_name='%2' AND owned='1' AND server='%3'",_gangID,_gangName,olympus_server];
-private _queryResult = [_query,2,true] call OES_fnc_asyncCall;
+// 使用 Mapper 获取建筑详情
+private _queryResult = ["getbuildingdetails", [str _gangID, _gangName, str olympus_server]] call DB_fnc_gangMapper;
 if (count _queryResult isEqualTo 0) exitWith {};
 
 private _pos = call compile format ["%1",_queryResult select 2];

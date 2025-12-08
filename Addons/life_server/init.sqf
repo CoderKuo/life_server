@@ -16,8 +16,8 @@
  *   true  - 自动将 MySQL 语法转换为 PostgreSQL [默认]
  *   false - 不进行转换（需要手动确保 SQL 兼容）
  */
-life_db_backend = "extdb3";      // 修改为 "pgsql" 以使用 PostgreSQL
-life_db_auto_convert = true;     // MySQL->PostgreSQL 自动语法转换
+life_db_backend = "pgsql";      // 修改为 "pgsql" 以使用 PostgreSQL
+life_db_auto_convert = false;    // 已迁移到 Mapper 原生 PostgreSQL 语法，无需自动转换
 life_pgsql_protocol = "SQL_MAIN"; // PostgreSQL 协议名称
 
 DB_Async_Active = false;
@@ -105,19 +105,20 @@ if (life_db_backend isEqualTo "pgsql") then {
 		private _version = [] call PGSQL_fnc_version;
 		format["[PGSQL] arma3-pgsql Version: %1", _version] call OES_fnc_diagLog;
 
-		// 添加数据库连接
-		private _dbResult = ["Main", 8] call PGSQL_fnc_addDatabase;
+		// 添加数据库连接 (使用 ini 文件中的 [Database2] 配置节)
+		private _dbResult = ["Database2"] call PGSQL_fnc_addDatabase;
 		if ((_dbResult select 0) != 1) exitWith {
 			EXTDB_FAILED(format["arma3-pgsql: 数据库连接失败 - %1", _dbResult select 1]);
 		};
 		"[PGSQL] 数据库连接成功" call OES_fnc_diagLog;
 
-		// 添加 SQL 协议
-		private _protoResult = [life_pgsql_protocol, "SQL", "Main"] call PGSQL_fnc_addProtocol;
+		// 添加 SQL 协议 (参数: 数据库ID, 协议类型, 协议名称, 初始化选项)
+		// TEXT 选项: 让 VARCHAR/TEXT 类型的值加上引号，避免大数字被解析为科学计数法
+		private _protoResult = ["Database2", "SQL", life_pgsql_protocol, "TEXT"] call PGSQL_fnc_addProtocol;
 		if ((_protoResult select 0) != 1) exitWith {
 			EXTDB_FAILED(format["arma3-pgsql: 协议添加失败 - %1", _protoResult select 1]);
 		};
-		format["[PGSQL] SQL 协议 '%1' 已添加", life_pgsql_protocol] call OES_fnc_diagLog;
+		format["[PGSQL] SQL 协议 '%1' 已添加 (TEXT模式)", life_pgsql_protocol] call OES_fnc_diagLog;
 
 		// 锁定扩展
 		["LOCK"] call PGSQL_fnc_lock;
@@ -132,6 +133,38 @@ if (life_db_backend isEqualTo "pgsql") then {
 	// 为兼容性设置一个假的 life_sql_id
 	life_sql_id = {life_pgsql_protocol};
 	__CONST__(life_sql_id,life_sql_id);
+
+	// ==========================================
+	// Create DB_fnc_* aliases for backward compatibility
+	// Functions are now compiled as OES_fnc_* but many files reference DB_fnc_*
+	// ==========================================
+
+	// Debug: Check which OES functions exist
+	format["[PGSQL_DEBUG] OES_fnc_dbExecute isNil: %1", isNil "OES_fnc_dbExecute"] call OES_fnc_diagLog;
+	format["[PGSQL_DEBUG] OES_fnc_dbConfig isNil: %1", isNil "OES_fnc_dbConfig"] call OES_fnc_diagLog;
+	format["[PGSQL_DEBUG] OES_fnc_vehicleMapper isNil: %1", isNil "OES_fnc_vehicleMapper"] call OES_fnc_diagLog;
+	format["[PGSQL_DEBUG] OES_fnc_gangMapper isNil: %1", isNil "OES_fnc_gangMapper"] call OES_fnc_diagLog;
+	format["[PGSQL_DEBUG] OES_fnc_miscMapper isNil: %1", isNil "OES_fnc_miscMapper"] call OES_fnc_diagLog;
+	format["[PGSQL_DEBUG] OES_fnc_marketMapper isNil: %1", isNil "OES_fnc_marketMapper"] call OES_fnc_diagLog;
+	format["[PGSQL_DEBUG] OES_fnc_houseMapper isNil: %1", isNil "OES_fnc_houseMapper"] call OES_fnc_diagLog;
+
+	DB_fnc_dbExecute = OES_fnc_dbExecute;
+	DB_fnc_dbConfig = OES_fnc_dbConfig;
+	DB_fnc_parseJsonb = OES_fnc_parseJsonb;
+	DB_fnc_playerMapper = OES_fnc_playerMapper;
+	DB_fnc_vehicleMapper = OES_fnc_vehicleMapper;
+	DB_fnc_houseMapper = OES_fnc_houseMapper;
+	DB_fnc_gangMapper = OES_fnc_gangMapper;
+	DB_fnc_miscMapper = OES_fnc_miscMapper;
+	DB_fnc_conquestMapper = OES_fnc_conquestMapper;
+	DB_fnc_marketMapper = OES_fnc_marketMapper;
+	DB_fnc_messageMapper = OES_fnc_messageMapper;
+	DB_fnc_logMapper = OES_fnc_logMapper;
+	"[PGSQL] DB_fnc_* aliases created for backward compatibility" call OES_fnc_diagLog;
+
+	// Initialize Database Mapper layer
+	[] call DB_fnc_dbConfig;
+	"[PGSQL] Database Mapper layer initialized" call OES_fnc_diagLog;
 
 } else {
 	// ==========================================
@@ -206,15 +239,27 @@ if(!(life_server_extDB_notLoaded isEqualTo "")) exitWith {};
 	};
 }; */
 
-["CALL "+(olympus_houseCleanup),1] spawn OES_fnc_asyncCall;
-["CALL "+(olympus_resetVehicles),1] spawn OES_fnc_asyncCall;
-["CALL deleteDeadVehicles",1] spawn OES_fnc_asyncCall;
-["CALL "+(olympus_deleteOldHouses),1] spawn OES_fnc_asyncCall;
-["CALL deleteOldGangs",1] spawn OES_fnc_asyncCall;
-["CALL giveCash",1] spawn OES_fnc_asyncCall;
-["CALL deleteContracts",1] spawn OES_fnc_asyncCall;
-["CALL gangBuildingCleanup",1] spawn OES_fnc_asyncCall;
-["CALL updateMemberNames",1] spawn OES_fnc_asyncCall;
+// 使用 Mapper 层调用存储过程 (异步执行，无需返回值)
+[] spawn {
+	// 房屋清理
+	["callhousecleanup", []] call DB_fnc_miscMapper;
+	// 重置车辆
+	["callresetlifevehicles", []] call DB_fnc_miscMapper;
+	// 删除已损毁车辆
+	["calldeletedeadvehicles", []] call DB_fnc_miscMapper;
+	// 删除旧房屋
+	["calldeleteoldhouses", []] call DB_fnc_miscMapper;
+	// 删除旧帮派
+	["calldeleteoldgangs", []] call DB_fnc_miscMapper;
+	// 发放现金
+	["callgivecash", []] call DB_fnc_miscMapper;
+	// 删除合同
+	["calldeletecontracts", []] call DB_fnc_miscMapper;
+	// 帮派建筑清理
+	["callgangbuildingcleanup", []] call DB_fnc_miscMapper;
+	// 更新成员名称
+	["callupdatemembernames", []] call DB_fnc_miscMapper;
+};
 //[] call OES_fnc_finalizeAuctions; //uncomment in live environment
 
 [] spawn OES_fnc_getMaxTitles;
@@ -253,11 +298,11 @@ addMissionEventHandler ["HandleDisconnect",{_this call OES_fnc_clientDisconnect;
 
 "mpid_log" addPublicVariableEventHandler {
 	// Add MPID logs to database and log
-  _mpids = _this select 1;
+	_mpids = _this select 1;
 
 	// validate pid to prevent sqli
 	_exit = false;
-  if (count _mpids < 2) exitWith {};
+	if (count _mpids < 2) exitWith {};
 
 	{
 	    if (_x isEqualType "" && count _x != 17) exitWith {
@@ -271,41 +316,43 @@ addMissionEventHandler ["HandleDisconnect",{_this call OES_fnc_clientDisconnect;
 	} forEach _mpids;
 	if (_exit) exitWith {};
 
-  // there might be a better way to do this, but return the row with any pid match
-  _query = format["SELECT id,pids FROM mpid WHERE pids LIKE '%1'", "%" + (_mpids select 0) + "%"];
-  {
-      if (_forEachIndex > 0) then {
-         _query = _query +  format[" OR pids LIKE '%1'", "%" + _x + "%"];
-       };
-  } forEach _mpids;
-  _queryResult = [_query,2,true] call OES_fnc_asyncCall;
-  if (count _queryResult == 0) then {
-      // insert
-      _query = format["INSERT INTO mpid (pids) VALUES ('%1')", _mpids];
-  } else {
-    // update
-    if (count _queryResult > 1) then {
-      // eg ["a", "b"] and ["c", "d"] exist, then the player logs in with ["a", "c"]
-      // merge all into one row and delete duplicates
-      _deleteIds = [];
-      {
-        { _mpids pushBackUnique _x; } forEach (_x select 1);
-        if (_forEachIndex > 0) then {
-          _deleteIds pushBackUnique (_x select 0);
-        };
-      } forEach _queryResult;
-      // delete extra rows
-      _query = format["DELETE FROM mpid WHERE id IN (%1)", _deleteIds joinString ","];
-      [_query,2] call OES_fnc_asyncCall;
-      // update single remaining row
-      _query = format["UPDATE mpid SET pids='%1' WHERE id=%2", _mpids, (_queryResult select 0) select 0];
-    } else {
-        // add db pids to _mpids (ie combine unique)
-        { _mpids pushBackUnique _x; } forEach ((_queryResult select 0) select 1);
-        _query = format["UPDATE mpid SET pids='%1' WHERE id=%2", _mpids, (_queryResult select 0) select 0];
-    };
-  };
-  _queryResult = [_query,1] call OES_fnc_asyncCall;
+	// 构建搜索条件
+	private _searchConditions = format["pids LIKE '%1'", "%" + (_mpids select 0) + "%"];
+	{
+		if (_forEachIndex > 0) then {
+			_searchConditions = _searchConditions + format[" OR pids LIKE '%1'", "%" + _x + "%"];
+		};
+	} forEach _mpids;
+
+	// 使用 Mapper 层搜索 MPID
+	private _queryResult = ["mpidsearch", [_searchConditions]] call DB_fnc_miscMapper;
+	if (isNil "_queryResult") then { _queryResult = []; };
+
+	if (count _queryResult == 0) then {
+		// insert - 使用 Mapper 层
+		["mpidinsert", [str _mpids]] call DB_fnc_miscMapper;
+	} else {
+		// update
+		if (count _queryResult > 1) then {
+			// eg ["a", "b"] and ["c", "d"] exist, then the player logs in with ["a", "c"]
+			// merge all into one row and delete duplicates
+			_deleteIds = [];
+			{
+				{ _mpids pushBackUnique _x; } forEach (_x select 1);
+				if (_forEachIndex > 0) then {
+					_deleteIds pushBackUnique (_x select 0);
+				};
+			} forEach _queryResult;
+			// delete extra rows - 使用 Mapper 层
+			["mpiddelete", [_deleteIds joinString ","]] call DB_fnc_miscMapper;
+			// update single remaining row - 使用 Mapper 层
+			["mpidupdate", [str _mpids, str ((_queryResult select 0) select 0)]] call DB_fnc_miscMapper;
+		} else {
+			// add db pids to _mpids (ie combine unique)
+			{ _mpids pushBackUnique _x; } forEach ((_queryResult select 0) select 1);
+			["mpidupdate", [str _mpids, str ((_queryResult select 0) select 0)]] call DB_fnc_miscMapper;
+		};
+	};
 };
 
 
@@ -366,6 +413,18 @@ life_runningLottery = false;
 publicVariable "life_runningLottery";
 life_lotteryCooldown = false;
 publicVariable "life_lotteryCooldown";
+life_lottery_round = 0;
+publicVariable "life_lottery_round";
+
+// 闪电彩变量
+life_flash_lottery_list = [];
+life_flash_lottery_running = false;
+publicVariable "life_flash_lottery_running";
+life_flash_lottery_cooldown = false;
+publicVariable "life_flash_lottery_cooldown";
+life_flash_lottery_round = 0;
+publicVariable "life_flash_lottery_round";
+
 client_session_list = [];
 life_terrorStatus = [false,"",0];
 publicVariable "life_terrorStatus";
@@ -475,10 +534,10 @@ publicVariable "oev_eventCooldown";
 	while{true} do {
 		uiSleep 300;
 		if(!(oev_conquestData select 0) && !(oev_conquestVote) && !(oev_secondConq) && [] call OEC_fnc_timeUntilRestart >= 60) then {
-			_query = format["SELECT id,completed,cancelled FROM conquest_schedule WHERE server=%1 AND start_time<=now() AND completed=0 AND cancelled=0 order by start_time asc",olympus_server];
-			_result = [_query,2] call OES_fnc_asyncCall;
-			if(count _result != 0) then {
-				[_result select 0] spawn OES_fnc_conquestVoteServ;
+			// 使用 Mapper 层查询待执行的征服活动
+			private _result = ["getscheduled", [str olympus_server]] call DB_fnc_conquestMapper;
+			if (!isNil "_result" && {_result isEqualType []} && {count _result != 0}) then {
+				[_result] spawn OES_fnc_conquestVoteServ;
 			};
 		};
 	};
@@ -537,8 +596,9 @@ life_donation_rebVehicles = false; //-- Remove when uncommenting above.
 publicVariable "life_donation_rebVehicles";
 
 //BW战利品和联邦黄金只增加
-_query = "SELECT DATEDIFF('2021-7-15',NOW())";
-_goalActive = (([_query,2] call OES_fnc_asyncCall) select 0);
+// 使用 Mapper 层计算日期差
+private _goalActiveResult = ["getdatediff", ["2021-7-15"]] call DB_fnc_miscMapper;
+_goalActive = if (isNil "_goalActiveResult" || {!(_goalActiveResult isEqualType [])} || {count _goalActiveResult == 0}) then { -1 } else { _goalActiveResult select 0 };
 life_donation_fedLoot = false;
 if (_goalActive >= 0) then {
 	life_donation_fedLoot = true;
@@ -582,8 +642,9 @@ publicVariable "life_donation_house";
 life_freedom = false; //-- Remove when uncommenting above.
 publicVariable "life_freedom";
 
-_query = "SELECT `winner_id` FROM conquests WHERE `date_started` BETWEEN date_format(NOW() - INTERVAL 1 MONTH, '%Y-%m-01') AND last_day(NOW() - INTERVAL 1 MONTH) GROUP BY `winner_id` ORDER BY COUNT(`winner_id`) DESC LIMIT 1";
-_conquestWinnerID = ([_query,2] call OES_fnc_asyncCall);
+// 使用 Mapper 层获取上月征服冠军
+private _conquestWinnerResult = ["getmonthlywinner", []] call DB_fnc_conquestMapper;
+_conquestWinnerID = if (isNil "_conquestWinnerResult" || {!(_conquestWinnerResult isEqualType [])} || {count _conquestWinnerResult == 0}) then { [] } else { _conquestWinnerResult };
 
 life_conquestMonthly = if (_conquestWinnerID isEqualTo []) then [{0}, {_conquestWinnerID select 0}];
 publicVariable "life_conquestMonthly";

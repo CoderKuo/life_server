@@ -1,7 +1,8 @@
 //	Author: Bryan "Tonic" Boardwine
 //	Description: Updates the gang information?
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_mode","_group","_groupID","_bank","_query","_owner"];
+private["_mode","_group","_groupID","_bank"];
 _mode = param [0,0,[0]];
 _group = param [1,grpNull,[grpNull]];
 
@@ -12,16 +13,14 @@ if(_groupID == -1) exitWith {};
 
 switch (_mode) do {
 	case 0: {
-		_bank = [(_group getVariable ["gang_bank",0])] call OES_fnc_numberSafe;
-
-		_query = format["UPDATE gangs SET bank='%1' WHERE id='%2'",_bank,_groupID];
+		_bank = [(_group getVariable ["gang_bank",0])] call OES_fnc_numberToString;
+		// 使用 Mapper 更新帮派银行
+		["updategangbank", [str _groupID, str _bank]] call DB_fnc_gangMapper;
 	};
 
 	case 1: {
-		_query = format["UPDATE gangs SET bank='%1' WHERE id='%2'",([(_group getVariable ["gang_bank",0])] call OES_fnc_numberSafe),_groupID];
+		_bank = [(_group getVariable ["gang_bank",0])] call OES_fnc_numberToString;
+		// 使用 Mapper 更新帮派银行
+		["updategangbank", [str _groupID, str _bank]] call DB_fnc_gangMapper;
 	};
-};
-
-if(!isNil "_query") then {
-	[_query,1] call OES_fnc_asyncCall;
 };

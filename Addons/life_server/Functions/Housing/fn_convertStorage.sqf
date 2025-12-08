@@ -1,11 +1,15 @@
 // File: fn_convertStorage.sqf
 // Author: Jesse "tkcjesse" Schultz
+// Modified: 迁移到 PostgreSQL Mapper 层
 private ["_query","_queryResult","_houseID","_crateQuery","_crates","_newInventory","_classnames","_items","_weapons","_magazines","_backpacks","_crateConents","_queryThree","_physInv","_weight","_itemWeight","_secondArray","_queryFour"];
-private _recordNum = ([format["SELECT COUNT(*) FROM houses%1 WHERE owned='1'",olympus_server],2] call OES_fnc_asyncCall) select 0;
+
+// 使用 houseMapper 获取已拥有房屋数量
+private _countResult = ["count", [str olympus_server]] call DB_fnc_houseMapper;
+private _recordNum = if (count _countResult > 0) then { (_countResult select 0) select 0 } else { 0 };
 
 for [{_x=0},{_x<=_recordNum},{_x=_x+1}] do {
-	_query = format ["SELECT id, pid FROM houses%2 WHERE owned='1' LIMIT %1,1",_x,olympus_server];
-	_queryResult = [_query,2,true] call OES_fnc_asyncCall;
+	// 使用 houseMapper 分页获取房屋
+	_queryResult = ["getownedhousepaged", [_x, str olympus_server]] call DB_fnc_houseMapper;
 	if (count _queryResult isEqualTo 0) exitWith {};
 
 	{
@@ -16,22 +20,22 @@ for [{_x=0},{_x<=_recordNum},{_x=_x+1}] do {
 		_newInventory = [];
 		_classnames = [];
 
-		_crateQuery = format ["SELECT id, pid, houseid, inventory FROM crates%1 WHERE owned='1' AND pid='%2' AND houseid='%3'",olympus_server,_pid,_houseID];
-		_crates = [_crateQuery,2,true] call OES_fnc_asyncCall;
+		// 使用 houseMapper 获取房屋箱子数据
+		_crates = ["gethousecrates", [_pid, _houseID, str olympus_server]] call DB_fnc_houseMapper;
 		if (count _crates isEqualTo 0) exitWith {
 			_physInv = [[],0];
-			_physInv = [_physInv] call OES_fnc_mresArray;
-			_queryThree = format ["UPDATE houses%1 SET physical_inventory='%2' WHERE id='%3' AND pid='%4'",olympus_server,_physInv,_houseID,_pid];
-			[_queryThree,1] call OES_fnc_asyncCall;
+			_physInv = [_physInv] call OES_fnc_escapeArray;
+			// 使用 houseMapper 设置物理仓库
+			["setphysinventory", [_physInv, _houseID, _pid, str olympus_server]] call DB_fnc_houseMapper;
 		};
 
 		{
-			_crateConents = [_x select 3] call OES_fnc_mresToArray;
+			// 解析箱子内容 - 从 JSONB 返回 SQF 格式字符串
+			_crateConents = [_x select 3, []] call DB_fnc_parseJsonb;
 			diag_log format ["Crate %1 PID %2 House %3",_x select 0,_x select 1,_x select 2];
 			diag_log format ["Current Inventory %1",_newInventory];
-			_queryFour = format ["UPDATE players SET bankacc = bankacc+200000 WHERE playerid='%1'",(_x select 1)];
-			[_queryFour,1] call OES_fnc_asyncCall;
-			if (_crateConents isEqualType "") then {_crateConents = call compile format ["%1", _crateConents];};
+			// 使用 playerMapper 增加银行余额
+			["incrementbank", [_x select 1, 200000]] call DB_fnc_playerMapper;
 			if (count _crateConents isEqualTo 0) exitWith {diag_log format ["No crate contents for HouseID: %1",_houseID];};
 
 			_weapons = (_crateConents select 1) select 0;
@@ -101,10 +105,10 @@ for [{_x=0},{_x<=_recordNum},{_x=_x+1}] do {
 		_secondArray = [];
 		_secondArray pushBack _newInventory;
 		_secondArray pushBack _weight;
-		_secondArray = [_secondArray] call OES_fnc_mresArray;
+		_secondArray = [_secondArray] call OES_fnc_escapeArray;
 		diag_log format ["Sending to Server: %1",_secondArray];
-		_queryThree = format ["UPDATE houses%1 SET physical_inventory='%2' WHERE id='%3' AND pid='%4'",olympus_server,_secondArray,_houseID,_pid];
-		[_queryThree,1] call OES_fnc_asyncCall;
+		// 使用 houseMapper 设置物理仓库
+		["setphysinventory", [_secondArray, _houseID, _pid, str olympus_server]] call DB_fnc_houseMapper;
 		diag_log "================= END OF CRATES ==================";
 		uiSleep 2;
 	} forEach _queryResult;

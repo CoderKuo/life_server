@@ -1,15 +1,31 @@
 //	Author: Bryan "Tonic" Boardwine
-//	Description:
-//	Queries to see if the player belongs to any gang.
+//	Description: Queries to see if the player belongs to any gang.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 private _check = (_this find "'" != -1);
 if (_check) exitWith {};
 
-private _query = format ["SELECT gangid, gangname, rank FROM gangmembers WHERE playerid='%1'",_this];
-private _queryResult = [_query,2] call OES_fnc_asyncCall;
+// 使用 Mapper 获取玩家帮派信息
+private _queryResult = ["getplayergang", [_this]] call DB_fnc_gangMapper;
+if (isNil "_queryResult" || {!(_queryResult isEqualType [])} || {count _queryResult == 0}) exitWith {
+	missionNamespace setVariable[format["gang_%1",_this], []];
+};
 
-_query = format ["SELECT pos FROM gangbldgs WHERE gang_id='%1' AND server='%2' AND owned='1'",(_queryResult select 0),olympus_server];
-private _newQuery = [_query,2] call OES_fnc_asyncCall;
+// 获取帮派建筑位置
+private _gangId = _queryResult select 0;
+if (isNil "_gangId") exitWith {
+	missionNamespace setVariable[format["gang_%1",_this], _queryResult];
+};
 
-_queryResult pushBack (call compile (_newQuery select 0));
+private _newQuery = ["getbuildingpositions", [str _gangId, str olympus_server]] call DB_fnc_gangMapper;
+if (!isNil "_newQuery" && {_newQuery isEqualType []} && {count _newQuery > 0}) then {
+	private _posData = _newQuery select 0;
+	if (!isNil "_posData" && {_posData isEqualType ""}) then {
+		_queryResult pushBack (call compile _posData);
+	} else {
+		_queryResult pushBack [];
+	};
+} else {
+	_queryResult pushBack [];
+};
 missionNamespace setVariable[format["gang_%1",_this],_queryResult];

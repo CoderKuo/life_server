@@ -1,6 +1,7 @@
 //	File: fn_sellGangBldg.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Sells off a gang building and adjusts the DB
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_building",objNull,[objNull]],
@@ -26,8 +27,8 @@ if (_failed) exitWith {
 uiSleep round(random(5));
 uiSleep round(random(5));
 
-_query = format ["UPDATE gangbldgs SET owned='0', pos='[]' WHERE gang_id='%1' AND gang_name='%2' AND server='%3'",_gangID,_gangName,olympus_server];
-[_query,1] call OES_fnc_asyncCall;
+// 使用 Mapper 卖出建筑
+["sellbuilding", [str _gangID, _gangName, str olympus_server]] call DB_fnc_gangMapper;
 
 _building setVariable ["bldg_id",nil,true];
 _building setVariable ["bldg_gangid",nil,true];

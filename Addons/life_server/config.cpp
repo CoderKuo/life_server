@@ -178,6 +178,8 @@ class CfgFunctions {
 			class bankDeaths {};
 			class updateCarName {};
 			class AdvancedLog {};  //日志
+			class buyLicenseServer {};  // 许可证购买服务端验证
+			class insertVehicle {};  // 从 MySQL 目录迁移
 		};
 
 		class Wanted_Sys {
@@ -224,12 +226,15 @@ class CfgFunctions {
 			class insertRequest{};
 			class updateRequest{};
 			class mresToArray {};
-			class insertVehicle {};
 			class updateVehOwnership {};
 			class bool{};
 			class mresString {};
 			class updatePartial {};
 			class dateToArray {};
+			// PostgreSQL escape functions (temporary location until MySQL migration complete)
+			class escapeString {};
+			class escapeArray {};
+			class numberToString {};
 		};
 
 		class Jail_Sys {
@@ -284,6 +289,7 @@ class CfgFunctions {
 			class convertSheds {};
 			class houseComp {};
 			class updateHouseDeed {};
+			class getHouseSaleHistory {};
 		};
 
 		class Events {
@@ -307,6 +313,7 @@ class CfgFunctions {
 			class insertGang {};
 			class activeGangs {};
 			class queryPlayerGang {};
+			class queryGangShedPos {};
 			class removeGang {};
 			class rentPay {};
 			class updateGang {};
@@ -316,6 +323,7 @@ class CfgFunctions {
 			class updateMember {};
 			class getGangInfo {};
 			class gangBank {};
+			class gangRename {};
 			class initGangBldgs {};
 			class lockGangBldg {};
 			class initTerritories {};
@@ -338,6 +346,30 @@ class CfgFunctions {
 			class handleMessages {};
 			class msgRequest {};
 		};
+
+		// Database Mapper Layer - Moved inside OlympusServer_Sys
+		class Database_Core {
+			file = "\life_server\Functions\Database\Core";
+			class dbExecute {};
+			class dbConfig {};
+			class arrayToJson {};
+			class jsonToArray {};
+			class parseJsonb {};
+		};
+
+		class Database_Mappers {
+			file = "\life_server\Functions\Database\Mappers";
+			class playerMapper {};
+			class vehicleMapper {};
+			class houseMapper {};
+			class gangMapper {};
+			class miscMapper {};
+			class conquestMapper {};
+			class marketMapper {};
+			class messageMapper {};
+			class logMapper {};
+		};
+
 	};
 };
 

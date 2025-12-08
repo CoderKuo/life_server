@@ -1,13 +1,27 @@
 //  File: fn_initTerritories
-//	Description: Initializes and manages the gang territories
+//  Description: Initializes and manages the gang territories
+//  Modified: Migrated to PostgreSQL Mapper layer
 
-private["_query","_territories","_territory","_gangID","_gangName","_captureProgress","_locID","_flagObject","_markerName","_capturableTerritories","_territoryData","_position","_alreadyUsedLocations","_markerCustomName","_supportedLocations","_supportedTerritories"];
-_query = format["SELECT territory_name, gang_id, gang_name, capture_progress FROM territories WHERE server='%1'",olympus_server];
+private["_territory","_gangID","_gangName","_captureProgress","_locID","_flagObject","_markerName","_capturableTerritories","_territoryData","_position","_alreadyUsedLocations","_markerCustomName","_supportedLocations","_supportedTerritories"];
 
-_territories = [_query,2,true] call OES_fnc_asyncCall;
-_territories = call compile format["%1", _territories];
+// Wait for database functions to load
+"[initTerritories] Waiting for database functions..." call OES_fnc_diagLog;
+waitUntil {uiSleep 0.1; !isNil "DB_fnc_dbExecute" && !isNil "DB_fnc_gangMapper"};
+"[initTerritories] DB functions loaded" call OES_fnc_diagLog;
+
 "------------- Territories Query Request -------------" call OES_fnc_diagLog;
-format["Query: %1",_query] call OES_fnc_diagLog;
+
+// Use Mapper to get territory data
+private _territories = ["getterritories", [str olympus_server]] call DB_fnc_gangMapper;
+
+format["[initTerritories] Territories Raw Result: %1 (type: %2)", _territories, typeName _territories] call OES_fnc_diagLog;
+
+// Validate result
+if (isNil "_territories" || {!(_territories isEqualType [])} || {count _territories == 0}) then {
+	_territories = [];
+	"[initTerritories] Territory data is empty or invalid, using empty array" call OES_fnc_diagLog;
+};
+
 format["Territories Result: %1",_territories] call OES_fnc_diagLog;
 "-----------------------------------------------------" call OES_fnc_diagLog;
 
@@ -25,6 +39,7 @@ _supportedLocations = [
 private _randomPersistent = selectRandom ["Meth","Moonshine","Mushroom"];
 
 {
+	if (isNil "_x" || {!(_x isEqualType [])} || {count _x < 4}) then { continue; };
 	_territory = _x select 0;
 	_gangID = _x select 1;
 	_gangName = _x select 2;
@@ -78,7 +93,7 @@ private _randomPersistent = selectRandom ["Meth","Moonshine","Mushroom"];
 				case "Moonshine": {"Moonshine and Heroin";};
 				case "Mushroom": {"Mushroom and Cocaine";};
 				case "Arms": {"Arms Dealer";};
-				default {"Ur Mum's"};
+				default {"Ur Mums"};
 			};
 
 			_markerName setMarkerText format["%1 (%2)",_markerCustomName,_gangName];
@@ -104,7 +119,7 @@ while{true} do {
 		_flagObject = call compile format["%1_flag",_territory];
 		_territoryData = _flagObject getVariable["capture_data",[0,"Neutral",0.5]];
 
-		_query = format["UPDATE territories SET gang_id='%1', gang_name='%2', capture_progress='%3', territory_name='%5' WHERE server='%4' AND territory_name='%5'",_territoryData select 0,_territoryData select 1,round((_territoryData select 2) * 100),olympus_server,_territory];
-		[_query,1] call OES_fnc_asyncCall;
+		// Use Mapper to update territory
+		["updateterritory", [str (_territoryData select 0), _territoryData select 1, str (round((_territoryData select 2) * 100)), str olympus_server, _territory]] call DB_fnc_gangMapper;
 	} forEach _supportedTerritories;
 };

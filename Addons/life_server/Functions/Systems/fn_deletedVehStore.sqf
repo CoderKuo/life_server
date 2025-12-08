@@ -1,8 +1,9 @@
 // File: fn_deletedVehStore.sqf
 // Author: Astral
 // Description: Replaces a vehicle in a players garage after it is deleted by an admin.
+// Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_plate","_uid","_vehicle","_vinfo","_vehGangID","_query"];
+private["_plate","_uid","_vehicle","_vinfo","_vehGangID"];
 
 _vehicle = param [0,ObjNull,[ObjNull]];
 _vInfo = _vehicle getVariable["dbInfo",[]];
@@ -17,11 +18,11 @@ if(count _vInfo > 0) then {
 	_uid = _vInfo select 0;
 };
 
+// 使用 vehicleMapper 设置车辆为非激活状态
 if !(_vehGangID isEqualTo 0) then {
-	_query = format["UPDATE gangvehicles SET active='0', persistentServer='0' WHERE gang_id='%1' AND plate='%2'",_vehGangID,_plate];
+	["setganginactive", [str _vehGangID, _plate]] call DB_fnc_vehicleMapper;
 } else {
-	_query = format["UPDATE vehicles SET active='0', persistentServer='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
+	["setinactive", [_uid, _plate]] call DB_fnc_vehicleMapper;
 };
 
-[_query,1] call OES_fnc_asyncCall;
 deleteVehicle _vehicle;

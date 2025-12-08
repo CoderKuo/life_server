@@ -1,6 +1,8 @@
 //	File: fn_updateGangOil.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Gives the gang building the ability to have oil storage
+//  Modified: 迁移到 PostgreSQL Mapper 层
+
 params [
 	["_building",objNull,[objNull]],
 	["_player",objNull,[objNull]]
@@ -23,24 +25,24 @@ if (_gangID isEqualTo -2 || _gangName isEqualTo "") exitWith {
 	["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 };
 
-private _query = format["SELECT bank FROM gangs WHERE id='%1'",_gangID];
-private _queryResult = (([_query,2] call OES_fnc_asyncCall) select 0);
+// 使用 Mapper 获取帮派银行余额
+private _queryResult = (["getgangbank", [str _gangID]] call DB_fnc_gangMapper) select 0;
 
 if (_queryResult < 500000) exitWith {
-	[1,"Purchase request denied. Your gang doesn't have the required gang funds to make the purchase!"] remoteExec ["OEC_fnc_broadcast",(owner _player),false];
+	[1,"Purchase request denied. Your gang doesnt have the required gang funds to make the purchase!"] remoteExec ["OEC_fnc_broadcast",(owner _player),false];
 	["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 };
 
 [2,_gangID,_player,-(500000)] call OES_fnc_gangBank;
 _building setVariable ["oilstorage",true,true];
 
-_query = format ["UPDATE gangbldgs SET oil='1' WHERE gang_id='%1' AND gang_name='%2' AND server='%3' AND owned='1'",_gangID,_gangName,olympus_server];
-[_query,1] call OES_fnc_asyncCall;
+// 使用 Mapper 升级油储
+["upgradebuildingoil", [str _gangID, _gangName, str olympus_server]] call DB_fnc_gangMapper;
 
 [1,"Your gang building has been renovated!"] remoteExec ["OEC_fnc_broadcast",(owner _player),false];
 ["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 
 format["Player %1(%2) purchased oil storage for the shed owned by %3(%4) on server %5",name _player,getPlayerUID _player,_gangName,_gangID,olympus_server] call OES_fnc_diagLog;
 
-private _logHistory = format ["INSERT INTO gangbankhistory (name,playerid,type,amount,gangid) VALUES('%1','%2','7','%3','%4')",name _player,getPlayerUID _player,500000,_gangID];
-[_logHistory,1] call OES_fnc_asyncCall;
+// 记录历史
+["addbankhistory", [name _player, getPlayerUID _player, "7", "500000", str _gangID]] call DB_fnc_gangMapper;

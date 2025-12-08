@@ -1,15 +1,17 @@
 //	Author: Raykazi
-//	Description:
-//	Fetches all the houses that the player has keys to along with the owner's name.
+//	Description: Fetches all the houses that the player has keys to along with the owner's name.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_query","_houses"];
 if(_this == "") exitWith {};
 
-_query = format["select pid, pos, id, players.name FROM houses INNER JOIN players ON houses.pid = players.playerid WHERE `player_keys` LIKE '%1' AND server='%2'", "%"+_this+"%",olympus_server];
-_houses = [_query,2,true] call OES_fnc_asyncCall;
+// 使用 Mapper 获取玩家钥匙房屋
+private _houses = ["getbykeys", [_this, str olympus_server]] call DB_fnc_houseMapper;
+if (isNil "_houses" || {!(_houses isEqualType [])}) then { _houses = []; };
+
 _return = [];
 _houseIDS = [];
 {
+	if (isNil "_x" || {!(_x isEqualType [])} || {count _x < 4}) then { continue; };
 	_pos = call compile format["%1",_x select 1];
 
 	if((count (nearestObjects[_pos,["House_F"],10])) > 0) then {

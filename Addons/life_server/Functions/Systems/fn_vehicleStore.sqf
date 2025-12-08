@@ -1,8 +1,9 @@
 //	File: fn_vehicleStore.sqf
 //  Author: Bryan "Tonic" Boardwine
 //	Description: Stores the vehicle in the 'Garage'
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_vehicle","_impound","_vInfo","_vInfo","_plate","_uid","_query","_sql","_unit","_ownerID","_vehGangID"];
+private["_vehicle","_impound","_vInfo","_vInfo","_plate","_uid","_unit","_ownerID","_vehGangID"];
 params [
 	["_vehicle",ObjNull,[ObjNull]],
 	["_impound",false,[true]],
@@ -31,12 +32,12 @@ if(_impound) then {
 	} else {
 		//Is it a gang vehicle?
 		if !(_vehGangID isEqualTo 0) then {
-			_query = format["UPDATE gangvehicles SET active='0', persistentServer='0' WHERE gang_id='%1' AND plate='%2'",_vehGangID,_plate];
+			// 使用 vehicleMapper 停用帮派车辆
+			["setganginactive", [str _vehGangID, str _plate]] call DB_fnc_vehicleMapper;
 		} else {
-			_query = format["UPDATE vehicles SET active='0', persistentServer='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
+			// 使用 vehicleMapper 停用玩家车辆
+			["setinactive", [_uid, str _plate]] call DB_fnc_vehicleMapper;
 		};
-		[_query,1] call OES_fnc_asyncCall;
-		//waitUntil {scriptDone _thread};
 		if(!isNil "_vehicle" && {!isNull _vehicle}) then {
 			life_serv_vehicles deleteAt (life_serv_vehicles find _vehicle);
 			deleteVehicle _vehicle;
@@ -52,9 +53,8 @@ if(_impound) then {
 			oev_garage_store = false;
 			_ownerID publicVariableClient "oev_garage_store";
 		};
-		_query = format["UPDATE gangvehicles SET active='0', persistentServer='0' WHERE gang_id='%1' AND plate='%2'",_gangID,_plate];
-		[_query,1] call OES_fnc_asyncCall;
-		//waitUntil {scriptDone _thread};
+		// 使用 vehicleMapper 停用帮派车辆
+		["setganginactive", [str _gangID, str _plate]] call DB_fnc_vehicleMapper;
 		if(!isNil "_vehicle" && {!isNull _vehicle}) then {
 			life_serv_vehicles deleteAt (life_serv_vehicles find _vehicle);
 			deleteVehicle _vehicle;
@@ -75,9 +75,8 @@ if(_impound) then {
 			_ownerID publicVariableClient "oev_garage_store";
 		};
 
-		_query = format["UPDATE vehicles SET active='0', persistentServer='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
-		[_query,1] call OES_fnc_asyncCall;
-		//waitUntil {scriptDone _thread};
+		// 使用 vehicleMapper 停用玩家车辆
+		["setinactive", [_uid, str _plate]] call DB_fnc_vehicleMapper;
 		if(!isNil "_vehicle" && {!isNull _vehicle}) then {
 			life_serv_vehicles deleteAt (life_serv_vehicles find _vehicle);
 			deleteVehicle _vehicle;

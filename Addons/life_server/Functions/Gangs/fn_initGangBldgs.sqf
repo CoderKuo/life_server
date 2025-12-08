@@ -1,27 +1,37 @@
 //	File: fn_initGangBldgs.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Initalizes the gangbldgs
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private _query = format ["SELECT COUNT(*) FROM gangbldgs WHERE owned='1' AND server='%1'",olympus_server];
-private _count = (([_query,2] call OES_fnc_asyncCall) select 0);
+// 使用 Mapper 获取建筑数量
+private _countResult = ["countbuildings", [str olympus_server]] call DB_fnc_gangMapper;
+if (isNil "_countResult" || {count _countResult == 0} || {isNil {_countResult select 0}}) exitWith {
+	"[initGangBldgs] 无法获取帮派建筑数量" call OES_fnc_diagLog;
+};
+private _count = _countResult select 0;
+if (isNil "_count" || {_count isEqualType ""}) then { _count = parseNumber str _count; };
+format["[initGangBldgs] 帮派建筑总数: %1", _count] call OES_fnc_diagLog;
 
 for [{_x=0},{_x<=_count},{_x=_x+10}] do {
-	_query = format ["SELECT id, owner, classname, pos, inventory, storage_cap, gang_id, gang_name, crate_count, lastpayment, nextpayment, paystatus, oil, physical_inventory, physical_storage_cap FROM gangbldgs WHERE owned='1' AND server='%1' LIMIT %2,10",olympus_server,_x];
-	private _queryResult = [_query,2,true] call OES_fnc_asyncCall;
-	if(count _queryResult isEqualTo 0) exitWith {};
+	// 使用 Mapper 获取建筑列表
+	private _queryResult = ["getallbuildings", [str olympus_server, _x]] call DB_fnc_gangMapper;
+	if (isNil "_queryResult" || {count _queryResult == 0}) exitWith {};
 
 	{
-		private _queryT = format ["SELECT DATEDIFF(ADDDATE('%1', 31 * %2), NOW())",(_x select 10), (_x select 11)];
-		private _queryResultT = (([_queryT,2] call OES_fnc_asyncCall) select 0);
-		private _queryTwo = format ["SELECT COUNT(*) FROM gangmembers WHERE gangid='%1' AND gangname='%2'",(_x select 6),(_x select 7)];
-		private _countResult = (([_queryTwo,2] call OES_fnc_asyncCall) select 0);
+		if (isNil "_x" || {count _x < 15}) then { continue; };
+		// 使用 Mapper 计算租期
+		private _rentResult = ["getdaysuntilrent", [str (_x select 10), (_x select 11)]] call DB_fnc_gangMapper;
+		private _queryResultT = if (isNil "_rentResult" || {count _rentResult == 0}) then { 0 } else { _rentResult select 0 };
+		// 使用 Mapper 统计成员数量
+		private _memberResult = ["countmembers", [str (_x select 6), (_x select 7)]] call DB_fnc_gangMapper;
+		private _countResult = if (isNil "_memberResult" || {count _memberResult == 0}) then { 0 } else { _memberResult select 0 };
 		private _pos = call compile format ["%1",_x select 3];
 		private _building = _pos nearestObject "House_F";
 		if !(typeOf _building isEqualTo (_x select 2)) exitWith {};
 
 		if !(isNull _building) then {
 			if (_building getVariable ["restricted_shed",false]) exitWith {
-				format["GANG BLDG ERROR: Shed had the restricted shed variable and wasn't setup! id: %1  bldgGang: %2  bldgOwner: %3",(_x select 0),(_x select 7),(_x select 1)] call OES_fnc_diagLog;
+				format["GANG BLDG ERROR: Shed had the restricted shed variable and wasnt setup! id: %1  bldgGang: %2  bldgOwner: %3",(_x select 0),(_x select 7),(_x select 1)] call OES_fnc_diagLog;
 			};
 			_building setVariable ["bldg_id",(_x select 0),true];
 			_building setVariable ["bldg_owner",(_x select 1),true];
@@ -36,11 +46,13 @@ for [{_x=0},{_x<=_count},{_x=_x+10}] do {
 
 			private _storageCap = 1000;
 			private _physicalStorageCap = 1000;
-			private _trunk = [(_x select 4)] call OES_fnc_mresToArray;
-			private _physicalTrunk = [(_x select 13)] call OES_fnc_mresToArray;
+
+			// 解析库存数据 - 从 JSONB 返回 SQF 格式字符串
+			private _trunk = [_x select 4, [[], 0]] call DB_fnc_parseJsonb;
+			private _physicalTrunk = [_x select 13, [[], 0]] call DB_fnc_parseJsonb;
+
 			_storageCap = (_x select 5);
 			_physicalStorageCap = (_x select 14);
-			if (typeName _trunk isEqualTo "STRING") then {_trunk = call compile format ["%1",_trunk];};
 			_building setVariable ["trunk",_trunk,true];
 			_building setVariable ["PhysicalTrunk",_physicalTrunk,true];
 			_building setVariable ["storageCapacity",_storageCap,true];

@@ -2,6 +2,7 @@
 //	Author: Kurt
 // 	Modifications: TheCmdrRex
 //	Description: Gives points to players for killing cops in warzone
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_killer",objNull,[objNull]],
@@ -23,7 +24,8 @@ switch (_mode) do {
 		if (_points > 5) then {
 			_points = 5;
 		};
-		[format["UPDATE players SET warpts = warpts + %1 WHERE playerid = %2",_points,_killerUID],1] spawn OES_fnc_asyncCall;
+		// 使用 playerMapper 添加战争点数
+		["addwarpts", [_killerUID, str _points]] spawn DB_fnc_playerMapper;
 
 		if !(isNull _killer) then {
 			[[0,5],format["Your war points have increased by %1 for killing a cop on warzone island.",_points]] remoteExec ["OEC_fnc_broadcast",_killer,false];
@@ -38,7 +40,8 @@ switch (_mode) do {
 			private _copLevel = _victim getVariable ["rank",0];
 
 			if (_copLevel > 2) then {
-				[format["UPDATE players SET warpts = warpts + 1 WHERE playerid = %1",_killerUID],1] spawn OES_fnc_asyncCall;
+				// 使用 playerMapper 添加战争点数
+				["addwarpts", [_killerUID, "1"]] spawn DB_fnc_playerMapper;
 
 				if !(isNull _killer) then {
 					[[0,5],"Your war points have increased by 1 for killing a cop near the federal reserve."] remoteExec ["OEC_fnc_broadcast",_killer,false];
@@ -56,7 +59,8 @@ switch (_mode) do {
 			private _copLevel = _victim getVariable ["rank",0];
 
 			if (_copLevel > 2) then {
-				[format["UPDATE players SET warpts = warpts + 2 WHERE playerid = %1",_killerUID],1] spawn OES_fnc_asyncCall;
+				// 使用 playerMapper 添加战争点数
+				["addwarpts", [_killerUID, "2"]] spawn DB_fnc_playerMapper;
 
 				if !(isNull _killer) then {
 					[[0,5],"Your war points have increased by 2 for killing a cop near the Blackwater."] remoteExec ["OEC_fnc_broadcast",_killer,false];

@@ -2,6 +2,7 @@
 //	Author: Jesse "tkcjesse" Schultz
 // 	Modifications: Fusah
 //	Description: Adds a gang house to the database
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_player",objNull,[objNull]],
@@ -20,14 +21,10 @@ if (_check) exitWith {};
 private _uid = getPlayerUID _player;
 private _buildingPos = getPosATL _building;
 
-uiSleep round(random(5));
-uiSleep round(random(5));
-uiSleep round(random(5));
-
 if (isNull _player) exitWith {};
 
-private _query = format ["SELECT id FROM gangbldgs WHERE gang_id='%1' AND gang_name='%2' AND owned='1' AND server='%3'",_gangId,_gangName,olympus_server];
-private _queryResult = [_query,2] call OES_fnc_asyncCall;
+// 使用 Mapper 检查帮派是否已有建筑
+private _queryResult = ["getbuildingid", [str _gangId, _gangName, str olympus_server]] call DB_fnc_gangMapper;
 
 if (count _queryResult != 0) exitWith {
 	[1,"购买失败,你的帮派已经拥有了一个帮派建筑!"] remoteExec ["OEC_fnc_broadcast",(owner _player),false];
@@ -35,8 +32,8 @@ if (count _queryResult != 0) exitWith {
 	["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 };
 
-_query = format ["SELECT id FROM gangbldgs WHERE pos='%1' AND server='%2' AND owned='1'",_buildingPos,olympus_server];
-_queryResult = [_query,2] call OES_fnc_asyncCall;
+// 检查位置是否已被占用
+_queryResult = ["buildingexists", [str _buildingPos, str olympus_server]] call DB_fnc_gangMapper;
 
 if (count _queryResult != 0) exitWith {
 	[1,"购买失败,这里已经被人购买了."] remoteExec ["OEC_fnc_broadcast",(owner _player),false];
@@ -44,17 +41,20 @@ if (count _queryResult != 0) exitWith {
 	["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 };
 
-_query = format["SELECT COUNT(*) FROM gangmembers WHERE gangid='%1' AND gangname='%2'",_gangId,_gangName];
-_queryResult = (([_query,2] call OES_fnc_asyncCall) select 0);
+// 统计帮派成员数量
+_queryResult = (["countmembers", [str _gangId, _gangName]] call DB_fnc_gangMapper) select 0;
 
-if (_queryResult < 8) exitWith {
+// 检查管理员权限 (adminlvl 是从数据库加载并同步到玩家对象的)
+private _isAdmin = (_player getVariable ["adminlvl", 0]) > 0;
+
+if (_queryResult < 8 && !_isAdmin) exitWith {
 	[1,"购买失败,你的帮派必须拥有8个以上成员!"] remoteExec ["OEC_fnc_broadcast",(owner _player),false];
 	["oev_houseTransaction",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 	["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 };
 
-_query = format["SELECT bank FROM gangs WHERE id='%1'",_gangId];
-_queryResult = (([_query,2] call OES_fnc_asyncCall) select 0);
+// 获取帮派银行余额
+_queryResult = (["getgangbank", [str _gangId]] call DB_fnc_gangMapper) select 0;
 
 _exit = false;
 if (life_donation_house) then {
@@ -77,16 +77,16 @@ if (life_donation_house) then {
 
 if (_exit) exitWith {};
 
-_query = format ["INSERT INTO gangbldgs (owner, classname, pos, inventory, owned, gang_id, gang_name, server, crate_count, lastpayment, nextpayment, physical_inventory) VALUES('%1', '%2', '%3', '""[[],0]""', '1', '%4', '%5', '%6', '2', NOW(), DATE_ADD(NOW(),INTERVAL 31 DAY), '""[[],0]""')",_uid,_classname,_buildingPos,_gangId,_gangName,olympus_server];
-_queryResult = [_query,1] call OES_fnc_asyncCall;
+// 使用 Mapper 创建建筑
+["createbuilding", [_uid, _classname, str _buildingPos, str _gangId, _gangName, str olympus_server]] call DB_fnc_gangMapper;
 
-private _logHistory = format ["INSERT INTO gangbankhistory (name,playerid,type,amount,gangid) VALUES('%1','%2','3','%3','%4')",name _player,getPlayerUID _player,20000000,_gangId];
-[_logHistory,1] call OES_fnc_asyncCall;
+// 记录历史
+["addbankhistory", [name _player, getPlayerUID _player, "3", "20000000", str _gangId]] call DB_fnc_gangMapper;
 
-uiSleep round(random(5));
+uiSleep 0.5;
 
-_query = format ["SELECT id FROM gangbldgs WHERE server='%1' AND owner='%2' AND owned='1' AND pos='%3'",olympus_server,_uid,_buildingPos];
-_queryResult = [_query,2] call OES_fnc_asyncCall;
+// 获取新建筑ID
+_queryResult = ["getbuildingbypos", [str olympus_server, _uid, str _buildingPos]] call DB_fnc_gangMapper;
 _building setVariable ["bldg_id",(_queryResult select 0),true];
 
 if (isNull _player) exitWith {};

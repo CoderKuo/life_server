@@ -2,14 +2,15 @@
 //	Author: Poseidon
 
 //	Description: Initializes the dynamic market.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 private["_resetMarket","_marketPrices","_query","_new","_marketPriceArray","_foodDiv","_legalDiv","_basePrices","_illegalDiv","_apple","_peach","_salema","_ornate","_mackerel","_mullet","_catshark","_tuna","_saltr","_cement","_glass","_ironr","_copperr","_silverr","_platinumr","_oilp","_diamondc","_marijuana","_frogp","_mmushroom","_heroinp","_cocainep","_turtle","_moonshine","_crystalmeth","_goldbar"];
 
-_query = format["SELECT market_array FROM market WHERE id='%1'",olympus_market];
-_marketPrices = [_query,2,true] call OES_fnc_asyncCall;
+// 使用 marketMapper 获取市场数据
+_marketPrices = ["getarray", [str olympus_market]] call DB_fnc_marketMapper;
 _marketPrices = call compile format["%1", (_marketPrices select 0) select 0];
 "------------- Market Query Request -------------" call OES_fnc_diagLog;
-format["Query: %1",_query] call OES_fnc_diagLog;
+format["Market ID: %1",olympus_market] call OES_fnc_diagLog;
 format["Market Query Result: %1",_marketPrices] call OES_fnc_diagLog;
 "------------------------------------------------" call OES_fnc_diagLog;
 
@@ -388,16 +389,15 @@ diag_log "Market Prices Generated!";
 
 
 //save market prices every 10 minutes
+// 使用 marketMapper 保存市场数据
 
 while{true} do {
 	uiSleep (60 * 10);
 	_marketPriceArray = [];
 	{_marketPriceArray pushBack (round(_x select 1));}foreach randomized_market_life_market_prices;
-	_marketPriceArray = [_marketPriceArray] call OES_fnc_mresArray;
+	_marketPriceArray = [_marketPriceArray] call OES_fnc_escapeArray;
 
-	_query = format["UPDATE market SET market_array='%1' WHERE id='%2'",_marketPriceArray,olympus_market];
-
-	[_query,1] call OES_fnc_asyncCall;
+	["updatearray", [str olympus_market, _marketPriceArray]] call DB_fnc_marketMapper;
 };
 
 

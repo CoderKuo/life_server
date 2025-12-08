@@ -2,6 +2,7 @@
 //	Author: Jesse "tkcjesse" Schultz
 //	Modifications: Fusah
 //	Description: Upgrades the gang buildings virtual storage limit
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_building",objNull,[objNull]],
@@ -45,19 +46,19 @@ if (_isVirtual) then {
 		["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 	};
 
-	private _query = format["SELECT bank FROM gangs WHERE id='%1'",_gangID];
-	private _queryResult = (([_query,2] call OES_fnc_asyncCall) select 0);
+	// 使用 Mapper 获取帮派银行余额
+	private _queryResult = (["getgangbank", [str _gangID]] call DB_fnc_gangMapper) select 0;
 
 	if (life_donation_house) then {
 		if (_queryResult < 1275000) exitWith {
-			[[1,"Purchase request denied. Your gang doesn't have the required gang funds to make the purchase!"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
+			[[1,"Purchase request denied. Your gang doesnt have the required gang funds to make the purchase!"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
 			[["oev_action_inUse",false],"OEC_fnc_netSetVar",(owner _player),false] spawn OEC_fnc_MP;
 			_exit = true;
 		};
 		[2,_gangID,_player,-(1275000)] call OES_fnc_gangBank;
 	} else {
 		if (_queryResult < 1500000) exitWith {
-			[[1,"Purchase request denied. Your gang doesn't have the required gang funds to make the purchase!"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
+			[[1,"Purchase request denied. Your gang doesnt have the required gang funds to make the purchase!"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
 			[["oev_action_inUse",false],"OEC_fnc_netSetVar",(owner _player),false] spawn OEC_fnc_MP;
 			_exit = true;
 		};
@@ -68,16 +69,16 @@ if (_isVirtual) then {
 
 	_building setVariable ["storageCapacity",_newInv,true];
 
-	_query = format ["UPDATE gangbldgs SET storage_cap='%1' WHERE gang_id='%2' AND gang_name='%3' AND server='%4' AND owned='1'",_newInv,_gangID,_gangName,olympus_server];
-	[_query,1] call OES_fnc_asyncCall;
+	// 使用 Mapper 更新存储容量
+	["updatebuildingstorage", [str _gangID, _gangName, str olympus_server, str _newInv, "virtual"]] call DB_fnc_gangMapper;
 
 	[1,"Your gang building has been renovated!"] remoteExec ["OEC_fnc_broadcast",(owner _player),false];
 	["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 
 	format["Player %1(%2) upgraded the storage to %3 for the shed owned by %4(%5) on server %6",name _player,getPlayerUID _player,_newInv,_gangName,_gangID,olympus_server] call OES_fnc_diagLog;
 
-	private _logHistory = format ["INSERT INTO gangbankhistory (name,playerid,type,amount,gangid) VALUES('%1','%2','5','%3','%4')",name _player,getPlayerUID _player,1500000,_gangID];
-	[_logHistory,1] call OES_fnc_asyncCall;
+	// 记录历史
+	["addbankhistory", [name _player, getPlayerUID _player, "5", "1500000", str _gangID]] call DB_fnc_gangMapper;
 } else {
 	private _currentPhysInv = _building getVariable ["physicalStorageCapacity",-1];
 	if ((_currentPhysInv >= 900) || (_currentPhysInv isEqualTo -1)) exitWith {
@@ -105,19 +106,19 @@ if (_isVirtual) then {
 		["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 	};
 
-	private _query = format["SELECT bank FROM gangs WHERE id='%1'",_gangID];
-	private _queryResult = (([_query,2] call OES_fnc_asyncCall) select 0);
+	// 使用 Mapper 获取帮派银行余额
+	private _queryResult = (["getgangbank", [str _gangID]] call DB_fnc_gangMapper) select 0;
 
 	if (life_donation_house) then {
 		if (_queryResult < 1275000) exitWith {
-			[[1,"Purchase request denied. Your gang doesn't have the required gang funds to make the purchase!"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
+			[[1,"Purchase request denied. Your gang doesnt have the required gang funds to make the purchase!"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
 			[["oev_action_inUse",false],"OEC_fnc_netSetVar",(owner _player),false] spawn OEC_fnc_MP;
 			_exit = true;
 		};
 		[2,_gangID,_player,-(1275000)] call OES_fnc_gangBank;
 	} else {
 		if (_queryResult < 1500000) exitWith {
-			[[1,"Purchase request denied. Your gang doesn't have the required gang funds to make the purchase!"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
+			[[1,"Purchase request denied. Your gang doesnt have the required gang funds to make the purchase!"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
 			[["oev_action_inUse",false],"OEC_fnc_netSetVar",(owner _player),false] spawn OEC_fnc_MP;
 			_exit = true;
 		};
@@ -128,14 +129,14 @@ if (_isVirtual) then {
 
 	_building setVariable ["physicalStorageCapacity",_newInv,true];
 
-	_query = format ["UPDATE gangbldgs SET physical_storage_cap='%1' WHERE gang_id='%2' AND gang_name='%3' AND server='%4' AND owned='1'",_newInv,_gangID,_gangName,olympus_server];
-	[_query,1] call OES_fnc_asyncCall;
+	// 使用 Mapper 更新物理存储容量
+	["updatebuildingstorage", [str _gangID, _gangName, str olympus_server, str _newInv, "physical"]] call DB_fnc_gangMapper;
 
 	[1,"Your gang building has been renovated!"] remoteExec ["OEC_fnc_broadcast",(owner _player),false];
 	["oev_action_inUse",false] remoteExec ["OEC_fnc_netSetVar",(owner _player),false];
 
 	format["Player %1(%2) upgraded the physical storage to %3 for the shed owned by %4(%5) on server %6",name _player,getPlayerUID _player,_newInv,_gangName,_gangID,olympus_server] call OES_fnc_diagLog;
 
-	private _logHistory = format ["INSERT INTO gangbankhistory (name,playerid,type,amount,gangid) VALUES('%1','%2','5','%3','%4')",name _player,getPlayerUID _player,1500000,_gangID];
-	[_logHistory,1] call OES_fnc_asyncCall;
+	// 记录历史
+	["addbankhistory", [name _player, getPlayerUID _player, "5", "1500000", str _gangID]] call DB_fnc_gangMapper;
 };

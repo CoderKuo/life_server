@@ -1,6 +1,7 @@
 //	File: fn_adminInsertVeh.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Adds a vehicle to a player from admin island request
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_classname","",[""]],
@@ -15,8 +16,8 @@ if (_check) exitWith {};
 private _check = (_classname find "'" != -1);
 if (_check) exitWith {};
 
-private _query = format ["SELECT uid FROM players WHERE playerid='%1'",_playerid];
-private _queryResult = [_query,2] call OES_fnc_asyncCall;
+// 使用 playerMapper 检查玩家是否存在
+private _queryResult = ["getuid", [_playerid]] call DB_fnc_playerMapper;
 
 if ((count _queryResult) isEqualTo 0) exitWith {
 	[[4,"The player you attempted to give a vehicle to doesn't exist in our database!"],"OEC_fnc_broadcast",(owner _admin),false] spawn OEC_fnc_MP;

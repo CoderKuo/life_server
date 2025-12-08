@@ -3,11 +3,12 @@
 //	Description:
 //	Server-side cleanup script on vehicles.
 //	Sort of a lame way but whatever.
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 
 //alive vehicle cleanup
 [] spawn{
-private["_veh","_handle","_dbInfo","_gangID","_uid","_plate","_query","_ill","_toDelete","_dist"];
+private["_veh","_handle","_dbInfo","_gangID","_uid","_plate","_ill","_toDelete","_dist"];
 _ill = ["I_G_Offroad_01_AT_F","B_T_LSV_01_armed_F","O_T_LSV_02_armed_F","B_Heli_Transport_03_black_F","B_Heli_Transport_01_camo_F","B_Heli_Transport_01_F","C_Plane_Civil_01_racing_F","I_C_Offroad_02_LMG_F","B_G_Offroad_01_armed_F","I_G_Offroad_01_armed_F","B_T_VTOL_01_vehicle_F","B_T_VTOL_01_infantry_F","O_Heli_Transport_04_bench_F"];
 	while{true} do {
 		uiSleep 300; // 5 minutes each loop, one to check and one to yeet the vehicle, making despawn 10 minutes total
@@ -32,12 +33,12 @@ _ill = ["I_G_Offroad_01_AT_F","B_T_LSV_01_armed_F","O_T_LSV_02_armed_F","B_Heli_
 						_uid = _dbInfo select 0;
 						_plate = _dbInfo select 1;
 						if (_uid isEqualTo "" && _plate isEqualTo 0) exitWith {};
+						// 使用 vehicleMapper 设置车辆为非激活状态
 						if !(_gangID isEqualTo 0) then {
-							_query = format["UPDATE "+dbColumGangVehicle+" SET active='0', persistentServer='0' WHERE gang_id='%1' AND plate='%2'",_gangID,_plate];
+							["setganginactive", [str _gangID, _plate]] call DB_fnc_vehicleMapper;
 						} else {
-							_query = format["UPDATE "+dbColumVehicle+" SET active='0', persistentServer='0' WHERE pid='%1' AND plate='%2'",_uid,_plate];
+							["setinactive", [_uid, _plate]] call DB_fnc_vehicleMapper;
 						};
-						[_query,1] spawn OES_fnc_asyncCall;
 					};
 					_toDelete pushBack _forEachIndex;
 					uiSleep 0.5;

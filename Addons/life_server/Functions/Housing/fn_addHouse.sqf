@@ -1,6 +1,7 @@
 //	Author: Bryan "Tonic" Boardwine
 //	File: fn_addHouse.sqf
 //	Description: Handles second part of house buying after purchase approved
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 private["_house","_uid","_housePos","_query","_player","_houseID"];
 _player = param [0,ObjNull,[ObjNull]];
@@ -8,20 +9,12 @@ _house = param [1,ObjNull,[ObjNull]];
 _price = param [2,-1,[0]];
 if(isNull _house || isNull _player) exitWith {};
 
-//random uiSleep times to prevent 2 players from buying same house if they click buy at same time
-
 _uid = getPlayerUID _player;
 _housePos = getPosATL _house;
 _houseID = _house getVariable ["house_id",-1];
 
-uiSleep round(random(4));
-uiSleep round(random(4));
-uiSleep round(random(4));
-
-_query = format["SELECT id FROM houses WHERE pos='%1' AND owned='1' AND server='%2'",_housePos,olympus_server];
-
-_queryResult = [_query,2] call OES_fnc_asyncCall;
-//Check to see if someone currently owns a house at this position
+// 检查房屋是否已被拥有
+_queryResult = ["exists", [str _housePos, str olympus_server]] call DB_fnc_houseMapper;
 
 if(isNull _player) exitWith {};
 if(count _queryResult != 0 && ((_house getVariable ["for_sale",""]) isEqualTo "")) exitWith {
@@ -36,8 +29,8 @@ if (_price == -1 && !((_house getVariable ["for_sale",""]) isEqualTo "")) exitWi
 	[["oev_action_inUse",false],"OEC_fnc_netSetVar",(owner _player),false] spawn OEC_fnc_MP;
 };
 if !((_house getVariable ["for_sale",""]) isEqualTo "") then {
-	_query = format["SELECT inAH FROM houses WHERE id='%1' AND owned='1' AND server='%2'",_queryResult,olympus_server];
-	_queryResult = [_query,2] call OES_fnc_asyncCall;
+	// 检查拍卖状态
+	_queryResult = ["isinauction", [str _queryResult, str olympus_server]] call DB_fnc_houseMapper;
 };
 if (!((_house getVariable ["for_sale",""]) isEqualTo "") && {_price != (_queryResult select 0)}) exitWith {
 	[[1,"Purchase request denied. Price did not match with DB. Please contact a Staff Member"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;
@@ -49,22 +42,32 @@ if (!((_house getVariable ["for_sale",""]) isEqualTo "") && {_price != (_queryRe
 
 if !((_house getVariable ["for_sale",""]) isEqualTo "") then {
 	if (_houseID == -1) then {
-		_query = format["SELECT id FROM houses WHERE pos='%1' AND owned='1' AND pid='%2' AND server='%3'",_housePos,((_house getVariable ["for_sale",""]) select 0),olympus_server];
-		_queryResult = [_query,2] call OES_fnc_asyncCall;
+		_queryResult = ["exists", [str _housePos, str olympus_server]] call DB_fnc_houseMapper;
 		_houseID = (_queryResult select 0);
 	};
 	_playerKeys = [];
-	_playerKeys = [_playerKeys] call OES_fnc_mresArray;
-	_query = format ["UPDATE houses SET pid='%2', player_keys='%4', inAH='0' WHERE id='%1' AND pid='%3' AND server='%5'",_houseID,_uid,((_house getVariable ["for_sale",""]) select 0),_playerKeys,olympus_server];
-	private _query2 = format ["UPDATE players SET realtor_cash = realtor_cash + '%1' WHERE playerid='%2'",_price,((_house getVariable ["for_sale",""]) select 0)];
-	private _query2Result = [_query2,1] call OES_fnc_asyncCall;
+	_playerKeys = [_playerKeys] call OES_fnc_escapeArray;
+
+	// 获取卖家信息
+	private _sellerUID = (_house getVariable ["for_sale",""]) select 0;
+	private _buyerName = name _player;
+	private _houseType = typeOf _house;
+	private _houseDisplayName = getText(configFile >> "CfgVehicles" >> _houseType >> "displayName");
+
+	// 更新房屋所有者
+	["updateowner", [str _houseID, _sellerUID, _uid, _playerKeys, str olympus_server]] call DB_fnc_houseMapper;
+	// 更新房产经纪人现金
+	["updaterealtorcash", [_sellerUID, _price, "add"]] call DB_fnc_playerMapper;
+	// 记录售房历史
+	["addhousesalehistory", [_sellerUID, _houseDisplayName, _price, _buyerName]] call DB_fnc_playerMapper;
 } else {
-	_query = format["INSERT INTO houses (pid, pos, inventory, owned, physical_inventory, server, expires_on) VALUES('%1', '%2', '""[[],0]""', '1', '""[[],0]""', '%3', DATE_ADD(TIMESTAMP(CURRENT_DATE()), INTERVAL 45 DAY))",_uid,_housePos, olympus_server];
+	// 插入新房屋
+	["insert", [_uid, str _housePos, str olympus_server]] call DB_fnc_houseMapper;
 };
-_queryResult = [_query,1] call OES_fnc_asyncCall;
-uiSleep 4;
-_query = format["SELECT id FROM houses WHERE pos='%1' AND pid='%2' AND owned='1' AND server='%3'",_housePos,_uid,olympus_server];
-_queryResult = [_query,2] call OES_fnc_asyncCall;
+
+uiSleep 0.5;
+// 获取新房屋ID
+_queryResult = ["exists", [str _housePos, str olympus_server]] call DB_fnc_houseMapper;
 _house setVariable["house_id",(_queryResult select 0),true];
 _house setVariable["keyPlayers",[],true];
 _house setVariable["house_expire",45,true];

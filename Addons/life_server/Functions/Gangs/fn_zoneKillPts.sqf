@@ -1,6 +1,7 @@
 //	File: fn_zoneKillPts.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Gives and removes points for players in the warzone area and cartels
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_killer",objNull,[objNull]],
@@ -38,7 +39,8 @@ if !(serv_timeFucked) then {
 
 if (_recentKill) exitWith {};
 
-[format["CALL setZoneKill(%1,%2)",_killerUID,_victimUID],1] spawn OES_fnc_asyncCall;
+// 使用 gangMapper 设置区域击杀
+["setzonekill", [_killerUID, _victimUID]] spawn DB_fnc_gangMapper;
 
 if !(isNull _victim) then {
 	[0,"Your war points have decreased by 1 point."] remoteExec ["OEC_fnc_broadcast",_victim,false];

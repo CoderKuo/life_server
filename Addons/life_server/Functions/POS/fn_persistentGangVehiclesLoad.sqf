@@ -1,38 +1,31 @@
 //	Author: Poseidon
 //	Description: Loads all persistent vehicles
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
-private["_query","_queryResult","_new","_vehicleID","_side","_className","_type","_gangID","_plate","_color","_insured","_mods","_position","_direction","_name","_vehicle","_spawnedVehicles","_tickTime","_turbo","_inventory","_gangName","_owners","_string"];
+private["_queryResult","_new","_vehicleID","_side","_className","_type","_gangID","_plate","_color","_insured","_mods","_position","_direction","_name","_vehicle","_spawnedVehicles","_tickTime","_turbo","_inventory","_gangName","_owners","_string"];
 
 _spawnedVehicles = [];
 _tickTime = diag_tickTime;
-_query = format["SELECT CONVERT(id, char), side, classname, type, gang_id, alive, active, plate, color, inventory, insured, modifications, persistentPosition, persistentDirection FROM "+dbColumGangVehicle+" WHERE alive='1' AND (active='0' OR active='%1') AND persistentServer='%1' AND side='%2'", olympus_server, "civ"];
-_queryResult = [_query,2,true] call OES_fnc_asyncCall;
+
+// 使用 vehicleMapper 获取持久化帮派车辆
+_queryResult = ["getgangpersistent", [str olympus_server, "civ"]] call DB_fnc_vehicleMapper;
+if (isNil "_queryResult" || {!(_queryResult isEqualType [])} || {count _queryResult == 0}) then {
+	_queryResult = [];
+	"[persistentGangVehiclesLoad] 没有持久化帮派车辆数据" call OES_fnc_diagLog;
+};
 
 {
-	//color & material array [color,material]
-	_string = (_x select 8);
-	_new = _string splitString "[,]";
-	_new = [_new select 0, call compile (_new select 1)];
-	if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-	_x set[8,_new];
+	if (isNil "_x" || {!(_x isEqualType [])} || {count _x < 14}) then { continue; };
 
-	//vehicle gear/virtual inventory, not yet fully implemented, but fetch it anyways
-	_new = [(_x select 9)] call OES_fnc_mresToArray;
-	if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-	_x set[9,_new];
-
-	//modification array, will contain values for each modification like armor, turbo, etc, max mods currently is 8
-	_new = [(_x select 11)] call OES_fnc_mresToArray;
-	if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-	_x set[11,_new];
-
-	//format position data
-	_new = (_x select 12);
-	if(_new isEqualType "") then {_new = call compile format["%1", _new];};
-	_x set[12,_new];
+	// 解析 JSONB 数据
+	_x set [8, [_x select 8, ["", 0]] call DB_fnc_parseJsonb];
+	_x set [9, [_x select 9, [[], 0]] call DB_fnc_parseJsonb];
+	_x set [11, [_x select 11, [0,0,0,0,0,0,0,0]] call DB_fnc_parseJsonb];
+	_x set [12, [_x select 12, [0, 0, 0]] call DB_fnc_parseJsonb];
 } forEach _queryResult;
 
 {
+	if (isNil "_x" || {!(_x isEqualType [])} || {count _x < 14}) then { continue; };
 	_vehicleID = _x select 0;
 	_side = _x select 1;
 	_className = _x select 2;
@@ -46,8 +39,11 @@ _queryResult = [_query,2,true] call OES_fnc_asyncCall;
 	_position = _x select 12;
 	_position set[2, (_position select 2) + 2];
 	_direction = _x select 13;
-	_name = [format["SELECT playerid, name FROM gangmembers WHERE gangid='%1' AND rank='5'", _gangID],2] call OES_fnc_asyncCall;
-	_gangName = [format["SELECT name FROM gangs WHERE id='%1'", _gangID],2] call OES_fnc_asyncCall;
+	// 使用 gangMapper 获取帮派领导者和名称
+	_name = ["getgangleader", [str _gangID]] call DB_fnc_gangMapper;
+	if (isNil "_name" || {count _name == 0}) then { _name = [["", "Unknown"]]; };
+	_gangName = ["getgangname", [str _gangID]] call DB_fnc_gangMapper;
+	if (isNil "_gangName" || {count _gangName == 0}) then { _gangName = "Unknown"; } else { _gangName = _gangName select 0; };
 	if(count _inventory isEqualTo 0) then {
 		_inventory = [[],0];
 	};
@@ -87,8 +83,8 @@ _queryResult = [_query,2,true] call OES_fnc_asyncCall;
 		}];
 	};
 
-	_query = format["UPDATE "+dbColumGangVehicle+" SET active='%1', persistentServer='%2', persistentPosition='%3', persistentDirection='%4' WHERE gang_id='%5' AND id=%6",olympus_server, 0, [[0,0,0]] call OES_fnc_mresArray, 0,_gangID,_vehicleID];
-	[_query,1] spawn OES_fnc_asyncCall;
+	// 使用 vehicleMapper 更新帮派车辆持久化状态
+	["updategangpersistent", [str _gangID, _vehicleID, str olympus_server, "0", [[0,0,0]] call OES_fnc_escapeArray, "0"]] call DB_fnc_vehicleMapper;
 
 	_spawnedVehicles pushBack _vehicle;
 
@@ -179,8 +175,8 @@ _spawnedVehicles spawn{
 
 			if !(isNull _foundPlayer) then {
 				deleteVehicle _vehicle;
-				_query = format["UPDATE "+dbColumGangVehicle+" SET active='0' inventory='%4', persistentServer='0' WHERE gang_id='%1' AND plate='%2' AND classname='%3'",_gangID,_plate,_className, [[[],0]] call OES_fnc_mresArray];
-				[_query,1] call OES_fnc_asyncCall;
+				// 使用 vehicleMapper 更新帮派车辆库存和持久化状态
+				["updateganginventory", [str _gangID, _plate, _className, [[[],0]] call OES_fnc_escapeArray, "0", [[0,0,0]] call OES_fnc_escapeArray, "0"]] call DB_fnc_vehicleMapper;
 			};
 		};
 	} forEach _this;

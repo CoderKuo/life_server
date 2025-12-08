@@ -1,5 +1,6 @@
 //	Original Author: Kurt
 //	File: fn_updateTitle.sqf
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_title","",[""]],
@@ -11,5 +12,5 @@ if (_check) exitWith {};
 private _check = (_uid find "'" != -1);
 if (_check) exitWith {};
 
-private _query = format["UPDATE players SET current_title = '%1' WHERE playerid='%2'",_title,_uid];
-[_query,1] spawn OES_fnc_asyncCall;
+// 使用 playerMapper 更新标题
+["updatetitle", [_title, _uid]] spawn DB_fnc_playerMapper;

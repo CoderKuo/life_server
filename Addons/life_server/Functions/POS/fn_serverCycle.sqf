@@ -1,12 +1,12 @@
 //	Author: Poseidon
 //	Description: Handles things for restarting server and stuff
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 private["_cycleLength","_startTime","_notificationTimes","_notificationServerTime","_time"];
 sleep 1;
 waitUntil{uiSleep 0.5; serverTime > 0 && serverTime < 259200};//检查以确保serverTime变量没有被破坏
 _cycleLength = ((6 * 60) * 60) - 360; //服务器在重新启动前启动的时间长度（以秒为单位）--对于mArma，也可以在init中进行调整
 _offset = getNumber(configFile >> "ServerCycle" >> (format ["server%1",olympus_server]) >> "offset");
-_query = format["select 240-FLOOR(TIME_TO_SEC(CONVERT_TZ(NOW(), 'UTC', 'US/Eastern'))/60 + %1) %2 240 as time_remaining",_offset,"%"];
 //_cycleLength = ([_query,2] call OES_fnc_asyncCall select 0) * 60; //获取服务器重新启动前的时间（秒）
 _startTime = serverTime; //当前服务器时间，因为服务器时间在重新加载任务后不会重置
 serv_mArmaTime = _startTime;  //----在初始化中也为mArma进行调整
@@ -23,13 +23,15 @@ serverHardReboot = false;
 serverUpdate = false;
 
 _hour = getNumber(configFile >> "ServerCycle" >> (format ["server%1",olympus_server]) >> "hour");
-_query = format["SELECT HOUR(CONVERT_TZ(DATE_ADD(NOW(), INTERVAL %1 MINUTE), 'UTC', 'US/Eastern'))=%2 as is_hard;",_cycleLength,_hour];
-_isHard = [_query,2] call OES_fnc_asyncCall select 0;
+// 使用 miscMapper 检查是否为硬重启
+private _isHardResult = ["checkhardreset", [str _cycleLength, str _hour]] call DB_fnc_miscMapper;
+_isHard = if (isNil "_isHardResult" || {count _isHardResult == 0}) then { 0 } else { _isHardResult select 0 };
 
 _isLock = 0;
 if(olympus_server isEqualTo 2) then {
-	_query = format["SELECT TIME(CONVERT_TZ(NOW(), 'UTC', 'US/Eastern')) BETWEEN '%1:30:00' AND '%2:30:00'",_hour,_hour+12];
-	_isLock = [_query,2] call OES_fnc_asyncCall select 0;
+	// 使用 miscMapper 检查时间范围
+	private _isLockResult = ["checktimerange", [str _hour, str (_hour+12)]] call DB_fnc_miscMapper;
+	_isLock = if (isNil "_isLockResult" || {count _isLockResult == 0}) then { 0 } else { _isLockResult select 0 };
 	if(_isLock isEqualTo 0) then {
 		"fdFPXGkYrxwdaxf5kiE" serverCommand "#lock";
 		[] spawn{

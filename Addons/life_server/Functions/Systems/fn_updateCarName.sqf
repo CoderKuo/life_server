@@ -1,6 +1,7 @@
 //  File: fn_updateCarName.sqf
 //	Author: Tech
 //	Description: Updates customName on the DB
+//  Modified: 迁移到 PostgreSQL Mapper 层
 params [
   ["_name","",[""]],
   ["_pid","",[""]],
@@ -19,6 +20,5 @@ if(_badChar) exitWith {};
 if(!_hasLetters) exitWith {};
 
 if(_name isEqualTo "" || _pid isEqualTo "" || _vid isEqualTo "") exitWith {};
-//Update DB
-_query = format["UPDATE "+dbColumVehicle+" SET customName='%1' WHERE pid='%2' AND id='%3'",_name,_pid,_vid];
-_sql = [_query,1] call OES_fnc_asyncCall;
+// 使用 vehicleMapper 更新车辆自定义名称
+["updatecustomname", [_pid, _vid, _name]] call DB_fnc_vehicleMapper;

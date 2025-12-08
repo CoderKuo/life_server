@@ -1,6 +1,7 @@
 //	File: fn_warInsertGang.sqf
 //	Author: Jesse "tkcjesse" Schultz
 //	Description: Inserts an accepted war into the DB
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_instigator",objNull,[objNull]],
@@ -24,10 +25,10 @@ if (_check) exitWith {};
 private _instigUID = getPlayerUID _instigator;
 private _acptUID = getPlayerUID _acceptor;
 
-private _query = format ["SELECT id FROM gangwars WHERE active='1' AND ((init_gangid='%1' AND acpt_gangid='%2') OR (acpt_gangid='%1' AND init_gangid='%2'))",_invGangID,_acptGangID];
-private _queryResult = [_query,2] call OES_fnc_asyncCall;
+// 使用 Mapper 检查战争是否已存在
+private _queryResult = ["warexists", [str _invGangID, str _acptGangID]] call DB_fnc_gangMapper;
 
 if !(count _queryResult isEqualTo 0) exitWith {};
 
-_query = format ["INSERT INTO gangwars (instigator,init_gangid,init_gangname,acceptor,acpt_gangid,acpt_gangname,active) VALUES ('%1','%2','%3','%4','%5','%6','1')",_instigUID,_invGangID,_invGangName,_acptUID,_acptGangID,_acptGangName];
-[_query,1] call OES_fnc_asyncCall;
+// 使用 Mapper 宣战
+["declarewar", [_instigUID, str _invGangID, _invGangName, _acptUID, str _acptGangID, _acptGangName]] call DB_fnc_gangMapper;

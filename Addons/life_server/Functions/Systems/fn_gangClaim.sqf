@@ -2,6 +2,7 @@
 //	Author: Jesse "tkcjesse" Schultz
 //  Modified by: Kurt
 //	Description: Switches vehicle owner in DB for the gang
+//  Modified: 迁移到 PostgreSQL Mapper 层
 
 params [
 	["_vehicle",objNull,[objNull]],
@@ -61,14 +62,13 @@ if (isNull _vehicle || !(alive _vehicle)) exitWith {
 private _pos = getPos _vehicle;
 private _dir = getDir _vehicle;
 
-private _query = format ["SELECT CONVERT(id, char), side, classname, type, plate, modifications FROM %1 WHERE pid='%2' AND active='%3' AND alive='1' AND plate='%4'",dbColumVehicle,_uid,olympus_server,_plate];
-private _vInformation = ([_query,2] call OES_fnc_asyncCall);
+// 使用 vehicleMapper 获取车辆详情
+private _vInformation = ["getdetailsbyplate", [_uid, str olympus_server, _plate]] call DB_fnc_vehicleMapper;
 private _vid = _vInformation select 0;
 deleteVehicle _vehicle;
 
-//Remove the vehicle from the owner in the database
-_query = format ["UPDATE %1 SET active='1', alive='0', insured='0', persistentServer='0', pid='%2' WHERE pid='%3' AND plate='%4'",dbColumVehicle,_claimerUID,_uid,_plate];
-[_query,1] call OES_fnc_asyncCall;
+// 使用 vehicleMapper 将车辆从所有者处移除
+["deactivateandkill", [_uid, _plate]] call DB_fnc_vehicleMapper;
 
 uiSleep 0.5;
 [_uid,_vInformation select 1,_vInformation select 3,_vInformation select 2,_color,_vInformation select 4,_gangID,false,call compile (_vInformation select 5)] remoteExec ["OES_fnc_insertVehicle",2];

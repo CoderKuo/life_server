@@ -31,8 +31,9 @@ private _ownerObj = _ownerID;
 _ownerID = owner _ownerID;
 
 private["_cooldownQuery","_cooldownQueryResult","_cooldownRequired","_cooldown2Required","_sideString","_cooldownTimeOld","_cooldownTimeNow","_lastSeconds","_currentSeconds","_timeDiff"];
-_cooldownQuery = format["SELECT last_server, last_side, TIMESTAMP(last_active), NOW(), adminlevel, warkills, current_title, developer_level, hex_icon, hex_icon_redemptions, designer_level FROM players WHERE playerid='%1'",_uid];
-_cooldownQueryResult = [_cooldownQuery,2] call OES_fnc_asyncCall;
+// PostgreSQL: 使用 last_active::timestamp 替代 TIMESTAMP(last_active)
+_cooldownQuery = format["SELECT last_server, last_side, last_active::timestamp, NOW(), adminlevel, warkills, current_title, developer_level, hex_icon, hex_icon_redemptions, designer_level FROM players WHERE playerid='%1'",_uid];
+_cooldownQueryResult = ["getsessioninfo", [_uid]] call DB_fnc_playerMapper;
 _cooldownRequired = false;
 _cooldown2Required = false;
 
@@ -110,7 +111,7 @@ if(_cooldown2Required) exitWith {
 	[["cooldown2", _timeDiff, (_cooldownQueryResult select 0),_cooldownTimeNow],"OEC_fnc_requestReceived",_ownerID,false] spawn OEC_fnc_MP;
 };
 
-[format["UPDATE players SET last_server='%1', last_side='%2' WHERE playerid='%3'",olympus_server,_sideString,_uid],1] call OES_fnc_asyncCall;
+["updatelastserver", [_uid, str olympus_server, _sideString]] call DB_fnc_playerMapper;
 
 if (_side isEqualTo west) then {
 	_gangData = _uid spawn OES_fnc_queryPlayerGang;
@@ -124,8 +125,9 @@ if(_side isEqualTo civilian) then {
 	waitUntil{scriptDone _gangData};
 	_gangArr = missionNamespace getVariable[format["gang_%1",_uid],[]];
 	if ((count _gangArr) isEqualTo 4) then {
-		private _queryTwo = format ["SELECT COUNT(*) FROM gangmembers WHERE gangid='%1' AND gangname='%2'",(_gangArr select 0),(_gangArr select 1)];
-		private _countResult = (([_queryTwo,2] call OES_fnc_asyncCall) select 0);
+		// 使用 gangMapper 统计帮派成员数量
+		private _countResultArr = ["countmembers", [str (_gangArr select 0), (_gangArr select 1)]] call DB_fnc_gangMapper;
+		private _countResult = if (!isNil "_countResultArr" && {count _countResultArr > 0}) then { _countResultArr select 0 } else { 0 };
 		if (_countResult < 8) then {
 			[[1],"OEC_fnc_gangNotifyMember",_ownerID,false] spawn OEC_fnc_MP;
 			//[(_gangArr select 0),(_gangArr select 1)] spawn OES_fnc_lockGangBldg;
@@ -153,7 +155,8 @@ _query = switch(_side) do {
 */
 //												0					1				2				3					4							5									6										7										8											9						10					11						12			13					14							15				16					17						18							19				20		    21
 private _queryIndex = ["playerid", "name", "cash", "bankacc", "adminlevel", "designer_level", "developer_level", "civcouncil_level", "restrictions_level", "newdonor", "licenses", "rankarrest", "gear", "aliases", "player_stats", "wanted", "blposnews", "supportteam", "vigiarrests", "vigiarrests_stored", "deposit_box", "gangarr", "housearr","housekeysarr", "vehkeys"];
-private _startStr = "SELECT playerid, name, cash, bankacc, adminlevel, designer_level, developer_level, civcouncil_level, restrictions_level, newdonor, %2, %3, %4, aliases, player_stats, wanted, %5, supportteam, vigiarrests, vigiarrests_stored, deposit_box FROM players WHERE playerid='%1'";
+// PostgreSQL: 使用 playerid::text 确保 playerid 作为字符串返回，避免科学计数法
+private _startStr = "SELECT playerid::text, name, cash, bankacc, adminlevel, designer_level, developer_level, civcouncil_level, restrictions_level, newdonor, %2, %3, %4, aliases, player_stats, wanted, %5, supportteam, vigiarrests, vigiarrests_stored, deposit_box FROM players WHERE playerid='%1'";
 _query = switch (_side) do {
 	case west: {format [_startStr, _uid, "cop_licenses", "coplevel", dbColumnGearCop, "blacklist"]};
 	case independent: {format [_startStr, _uid, "med_licenses", "mediclevel", dbColumnGearMed, "newslevel"]};
@@ -167,8 +170,24 @@ _query = switch (_side) do {
 };
 */
 
+// 使用 Mapper 层获取数据，定义变量
+private _sideStr = switch (_side) do {
+	case west: { "cop" };
+	case independent: { "med" };
+	default { "civ" };
+};
+private _gearCol = switch (_side) do {
+	case west: { dbColumnGearCop };
+	case independent: { dbColumnGearMed };
+	default { dbColumnGearCiv };
+};
+private _posCol = switch (_side) do {
+	case west: { "blacklist" };
+	case independent: { "newslevel" };
+	default { dbColumnPosition };
+};
 _tickTime = diag_tickTime;
-_queryResult = [_query,2] call OES_fnc_asyncCall;
+_queryResult = ["getfulldata", [_uid, _sideStr, _gearCol, _posCol]] call DB_fnc_playerMapper;
 
 if(_queryResult isEqualType "") exitWith {
 	[[],"OEC_fnc_insertPlayerInfo",_ownerID,false,true] spawn OEC_fnc_MP;
@@ -181,16 +200,16 @@ if(count _queryResult == 0) exitWith {
 //Blah conversion thing from a2net->extdb
 private["_tmp"];
 _tmp = _queryResult select (_queryIndex find "cash");
-_queryResult set [(_queryIndex find "cash"), [_tmp] call OES_fnc_numberSafe];
+_queryResult set [(_queryIndex find "cash"), [_tmp] call OES_fnc_numberToString];
 _tmp = _queryResult select (_queryIndex find "bankacc");
-_queryResult set [(_queryIndex find "bankacc"), [_tmp] call OES_fnc_numberSafe];
+_queryResult set [(_queryIndex find "bankacc"), [_tmp] call OES_fnc_numberToString];
 // Donor Shit
 _tmp = _queryResult select (_queryIndex find "newdonor");
-_queryResult set [(_queryIndex find "newdonor"), [_tmp] call OES_fnc_numberSafe];
+_queryResult set [(_queryIndex find "newdonor"), [_tmp] call OES_fnc_numberToString];
 
-//Parse licenses
-_new = [(_queryResult select (_queryIndex find "licenses"))] call OES_fnc_mresToArray;
-if(_new isEqualType "") then {_new = call compile format["%1", _new];};
+//Parse licenses - 从 JSONB 返回 SQF 格式字符串
+private _licensesData = _queryResult select (_queryIndex find "licenses");
+private _new = [_licensesData, []] call DB_fnc_parseJsonb;
 _queryResult set [(_queryIndex find "licenses"), _new];
 
 //Convert tinyint to boolean
@@ -202,21 +221,27 @@ for "_i" from 0 to (count _old)-1 do {
 
 _queryResult set [(_queryIndex find "licenses"), _old];
 
-_new = [(_queryResult select (_queryIndex find "gear"))] call OES_fnc_mresToArray;
-if(_new isEqualType "") then {_new = call compile format["%1", _new];};
+// Gear 解析 - 从 JSONB 返回 SQF 格式字符串
+private _gearData = _queryResult select (_queryIndex find "gear");
+_new = [_gearData, []] call DB_fnc_parseJsonb;
 _queryResult set [(_queryIndex find "gear"), _new];
 
-_new = [(_queryResult select (_queryIndex find "aliases"))] call OES_fnc_mresToArray;
-if(_new isEqualType "") then {_new = call compile format["%1", _new];};
+// Aliases 解析 - 从 JSONB 返回 SQF 格式字符串
+private _aliasesData = _queryResult select (_queryIndex find "aliases");
+_new = [_aliasesData, []] call DB_fnc_parseJsonb;
 _queryResult set [(_queryIndex find "aliases"), _new];
 
-if((count toArray((_queryResult select (_queryIndex find "player_stats")))) <= 15) then {_queryResult set [(_queryIndex find "player_stats"), "[0,0,0,0,0,0,0,0,0,0]"];};
-_new = [(_queryResult select (_queryIndex find "player_stats"))] call OES_fnc_mresToArray;
-if(_new isEqualType "") then {_new = call compile format["%1", _new];};
+// Player stats 解析 - 从 JSONB 返回 SQF 格式字符串
+private _statsData = _queryResult select (_queryIndex find "player_stats");
+if (!isNil "_statsData" && {_statsData isEqualType ""} && {(count toArray(_statsData)) <= 15}) then {
+	_statsData = "[0,0,0,0,0,0,0,0,0,0]";
+};
+_new = [_statsData, [0,0,0,0,0,0,0,0,0,0]] call DB_fnc_parseJsonb;
 _queryResult set [(_queryIndex find "player_stats"), _new];
 
-_new = [(_queryResult select (_queryIndex find "wanted"))] call OES_fnc_mresToArray;
-if(_new isEqualType "") then {_new = call compile format["%1", _new];};
+// Wanted 解析 - 从 JSONB 返回 SQF 格式字符串
+private _wantedData = _queryResult select (_queryIndex find "wanted");
+_new = [_wantedData, []] call DB_fnc_parseJsonb;
 _queryResult set [(_queryIndex find "wanted"), _new];
 
 //Parse data for specific side.
@@ -227,11 +252,14 @@ switch (_side) do {
 	};
 
 	case civilian: {
-		_new = [(_queryResult select (_queryIndex find "rankarrest"))] call OES_fnc_mresToArray;
-		if(_new isEqualType "") then {_new = call compile format["%1", _new];};
+		// rankarrest 解析 - 从 JSONB 返回 SQF 格式字符串
+		private _rankarrestData = _queryResult select (_queryIndex find "rankarrest");
+		_new = [_rankarrestData, [0, 0, 0]] call DB_fnc_parseJsonb;
 		_queryResult set [(_queryIndex find "rankarrest"), _new];
-		_new = [(_queryResult select (_queryIndex find "blposnews"))] call OES_fnc_mresToArray;
-		if(_new isEqualType "") then {_new = call compile format["%1", _new];};
+
+		// blposnews (position) 解析 - 从 JSONB 返回 SQF 格式字符串
+		private _blposnewsData = _queryResult select (_queryIndex find "blposnews");
+		_new = [_blposnewsData, []] call DB_fnc_parseJsonb;
 		_queryResult set [(_queryIndex find "blposnews"), _new];
 
 		if(_isDeadCiv) then {
@@ -249,7 +277,7 @@ private _statsArray = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 //Stats
 // 0 - Civilian kills, 1 - Cop kills, 2 - Epipens used, 3 - Lockpicked vehicles, 4 - Players robbed, 5 - Prison time spent, 6 - Suicide vests used, 7 - Armed plane kills, 8 - Drugs sold, 9 - Bombs planted, 10 - AA Hacked, 11 - Cop lethals, 12 - Pardons issued, 13 - Cop arrests, 14 - Tickets issued that were paid, 15 - Bombs defused, 16 - Donuts eaten, 17 - Drugs seized (currency), 18 - Warkills, 19 - Vigilante arrests, 20 - Gokart time (time trial), 21 - Toolkits used on medic, 22 - AA Repairs, 23 - Medic Impounds (not windows key), 24 - titan hits, 25 - Hit_claimed, 26 - Hit_placed, 27 - bets_won, 28 - bets_lost, 29 - bets_won_value, 30 - bets_lost_value
 private _statsQuery = format["SELECT civ_kills, cop_kills, epipen, lockpick_suc, robberies, prison_time, sui_vest, plane_kills, (marijuana + heroinp + cocainep + crystalmeth + mmushroom + frogp + moonshine), (blastfed + blastjail + blastbw + blastbank), AA_hacked, cop_lethals, pardons, cop_arrests, tickets_issued_paid, defuses, donuts, drugs_seized_currency, vigiarrests, gokart_time, med_toolkits, AA_repaired, med_impounds, titan_hits, hits_claimed, hits_placed, bets_won, bets_lost, bets_won_value, bets_lost_value, vehicles_chopped, cops_robbed, jail_escapes, money_spent, events_won, kills_1km, conq_kills, conq_deaths, conq_captures, casino_winnings, casino_losses, casino_uses, lethal_injections FROM stats WHERE playerid='%1'",_uid];
-private _statsReturn = [_statsQuery,2] call OES_fnc_asyncCall;
+private _statsReturn = ["getstats", [_uid]] call DB_fnc_playerMapper;
 
 if !(count _statsReturn isEqualTo 0) then {
 	private _index = 0;
