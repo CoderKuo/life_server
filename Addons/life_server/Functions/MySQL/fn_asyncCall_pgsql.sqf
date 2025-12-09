@@ -21,6 +21,32 @@ params [
     ["_multiarr", false, [false]]
 ];
 
+// ==========================================
+// 科学计数法修复函数
+// 递归处理数组/值，将科学计数法字符串转换为数字
+// ==========================================
+private _fixScientificNotation = {
+    params ["_value"];
+
+    // 如果是数组，递归处理每个元素
+    if (_value isEqualType []) exitWith {
+        _value apply { [_x] call _fixScientificNotation }
+    };
+
+    // 如果是字符串，检查是否是科学计数法格式
+    if (_value isEqualType "") exitWith {
+        // 匹配科学计数法: 数字e+/-数字 (如 "1.40001e+07", "5e+06", "-3.5e-02")
+        if (_value regexMatch "^-?[0-9]+\.?[0-9]*[eE][+-]?[0-9]+$") then {
+            parseNumber _value
+        } else {
+            _value
+        };
+    };
+
+    // 其他类型直接返回
+    _value
+};
+
 // 获取协议名称（在init.sqf中设置）
 private _protocol = missionNamespace getVariable ["life_pgsql_protocol", "SQL_MAIN"];
 
@@ -92,5 +118,8 @@ _return = _queryResult select 1;
 if (!_multiarr && count _return > 0) then {
     _return = _return select 0;
 };
+
+// 修复科学计数法: 将 "1.40001e+07" 等字符串转换回数字
+_return = [_return] call _fixScientificNotation;
 
 _return

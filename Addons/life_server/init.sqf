@@ -294,6 +294,106 @@ life_radio_civ = radioChannelCreate [[255, 244, 0, 0.23], "平民频道", "%UNIT
 
 serv_sv_use = [];
 
+// ==========================================
+// 服务器 HashMap 缓存初始化 (性能优化)
+// ==========================================
+OES_playerByUID = createHashMap;     // UID -> 玩家对象
+OES_playerByOwner = createHashMap;   // ownerID -> 玩家对象
+OES_itemWeights = createHashMapFromArray [
+	["lethalinjector", 10], ["oilu", 3], ["oilp", 2], ["heroinu", 2], ["heroinp", 1],
+	["pheroin", 1], ["painkillers", 1], ["cannabis", 2], ["fireworks", 1], ["marijuana", 1],
+	["hash", 1], ["apple", 1], ["water", 1], ["yakult", 2], ["salema", 2], ["ornate", 2],
+	["mackerel", 3], ["tuna", 4], ["mullet", 3], ["catshark", 4], ["turtle", 3],
+	["fishing", 2], ["turtlesoup", 2], ["donuts", 1], ["coffee", 1], ["fuelE", 2],
+	["fuelF", 5], ["money", 0], ["pickaxe", 2], ["copperore", 2], ["ironore", 2],
+	["copperr", 1], ["ironr", 1], ["sand", 2], ["salt", 2], ["saltr", 1], ["glass", 1],
+	["diamond", 2], ["diamondc", 1], ["cocaine", 2], ["cocainep", 1], ["crack", 1],
+	["spikeStrip", 10], ["rock", 3], ["cement", 2], ["goldbar", 6], ["moneybag", 6],
+	["blastingcharge", 15], ["hackingterminal", 7], ["takeoverterminal", 7],
+	["boltcutter", 5], ["fireaxe", 5], ["defusekit", 2], ["storagesmall", 5],
+	["oilbarrel", 5], ["storagebig", 10], ["frog", 2], ["frogp", 1], ["acid", 1],
+	["crystalmeth", 3], ["methu", 3], ["phosphorous", 2], ["ephedra", 2], ["lithium", 2],
+	["moonshine", 3], ["rum", 3], ["mashu", 3], ["corn", 2], ["sugar", 2], ["yeast", 2],
+	["platinum", 2], ["platinumr", 1], ["silver", 2], ["silverr", 1], ["beer", 1],
+	["cupcake", 1], ["pepsi", 1], ["burger", 1], ["mushroom", 2], ["mmushroom", 1],
+	["mmushroomp", 1], ["mushroomu", 1], ["gpstracker", 2], ["egpstracker", 2],
+	["gpsjammer", 3], ["ccocaine", 1], ["kidney", 25], ["scalpel", 4], ["barrier", 20],
+	["speedbomb", 10], ["potato", 1], ["cream", 1], ["bloodbag", 5], ["epiPen", 10],
+	["dopeShot", 10], ["baitcar", 1], ["vehAmmo", 5], ["woodLog", 3], ["lumber", 2],
+	["bananau", 2], ["bananap", 1], ["topaz", 2], ["topazr", 1], ["scrap", 1],
+	["emearld", 2], ["amethyst", 2], ["coin", 2], ["wpearl", 1], ["bpearl", 1],
+	["cocoau", 2], ["cocoap", 1], ["bananaSplit", 2], ["sugarp", 1], ["blindfold", 1],
+	["panicButton", 1], ["wplPanicButton", 15], ["roadKit", 1], ["excavationtools", 1],
+	["stire", 1], ["rubber", 1], ["alumore", 1], ["coal", 1], ["ltire", 1], ["fibers", 1],
+	["window", 1], ["rglass", 1], ["vdoor", 1], ["electronics", 1], ["smetal", 1],
+	["splating", 1], ["alumalloy", 1], ["bcremote", 0], ["paintingSm", 33],
+	["paintingLg", 50], ["gokart", 25], ["wildfruit", 2]
+];
+diag_log "[HashMap] 服务器 HashMap 配置初始化完成";
+
+// ==========================================
+// 玩家缓存辅助函数
+// ==========================================
+// 通过 UID 获取玩家对象 (O(1) 缓存 + 验证)
+OES_fnc_getPlayerByUID = {
+	params ["_uid"];
+	if (_uid == "") exitWith { objNull };
+	private _cached = OES_playerByUID getOrDefault [_uid, objNull];
+	if (!isNull _cached && {alive _cached} && {getPlayerUID _cached == _uid}) exitWith { _cached };
+	// 缓存无效，遍历查找并更新
+	private _player = objNull;
+	{ if (getPlayerUID _x == _uid) exitWith { _player = _x; OES_playerByUID set [_uid, _x]; }; } forEach allPlayers;
+	_player
+};
+
+// 通过 ownerID 获取玩家对象 (O(1) 缓存 + 验证)
+OES_fnc_getPlayerByOwner = {
+	params ["_ownerID"];
+	if (_ownerID == 0) exitWith { objNull };
+	private _cached = OES_playerByOwner getOrDefault [_ownerID, objNull];
+	if (!isNull _cached && {alive _cached} && {owner _cached == _ownerID}) exitWith { _cached };
+	// 缓存无效，遍历查找并更新
+	private _player = objNull;
+	{ if (owner _x == _ownerID) exitWith { _player = _x; OES_playerByOwner set [_ownerID, _x]; }; } forEach allPlayers;
+	_player
+};
+
+// ==========================================
+// 玩家连接/断开事件处理 (更新缓存)
+// ==========================================
+addMissionEventHandler ["PlayerConnected", {
+	params ["_id", "_uid", "_name", "_jip", "_owner", "_idstr"];
+	// 验证参数有效性
+	if (_uid == "" || _owner <= 0) exitWith {};
+	// 延迟执行确保玩家对象已创建 (不依赖 CBA)
+	[_uid, _owner] spawn {
+		params ["_uid", "_owner"];
+		sleep 0.5;
+		private _idx = allPlayers findIf {getPlayerUID _x == _uid};
+		if (_idx != -1) then {
+			private _playerObj = allPlayers select _idx;
+			OES_playerByUID set [_uid, _playerObj];
+			OES_playerByOwner set [_owner, _playerObj];
+			diag_log format ["[HashMap] 玩家缓存已更新: UID=%1, Owner=%2", _uid, _owner];
+		};
+	};
+}];
+
+addMissionEventHandler ["PlayerDisconnected", {
+	params ["_id", "_uid", "_name", "_jip", "_owner", "_idstr"];
+	// 验证参数有效性，避免删除无效键
+	if (_uid != "") then {
+		OES_playerByUID deleteAt _uid;
+	};
+	if (_owner > 0) then {
+		OES_playerByOwner deleteAt _owner;
+	};
+	// 只在有有效数据时输出日志
+	if (_uid != "" || _owner > 0) then {
+		diag_log format ["[HashMap] 玩家缓存已移除: UID=%1, Owner=%2", _uid, _owner];
+	};
+}];
+
 addMissionEventHandler ["HandleDisconnect",{_this call OES_fnc_clientDisconnect; false;}]; //Do not second guess this, this can be stacked this way.
 
 "mpid_log" addPublicVariableEventHandler {

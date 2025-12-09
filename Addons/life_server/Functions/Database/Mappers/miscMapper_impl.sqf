@@ -146,13 +146,15 @@ switch (toLower _method) do {
 
     case "checkhardreset": {
         _params params [["_offset", "", [""]], ["_hour", "", [""]]];
-        private _sql = format ["SELECT EXTRACT(HOUR FROM ((NOW() + INTERVAL '%1 minutes') AT TIME ZONE 'UTC' AT TIME ZONE 'US/Eastern'))=%2 as is_hard", _offset, _hour];
+        // 返回 1 或 0 而不是布尔值，避免 parseSimpleArray 解析错误
+        private _sql = format ["SELECT CASE WHEN EXTRACT(HOUR FROM ((NOW() + INTERVAL '%1 minutes') AT TIME ZONE 'UTC' AT TIME ZONE 'US/Eastern'))=%2 THEN 1 ELSE 0 END as is_hard", _offset, _hour];
         _result = [1, "server_check_hard_reset", _sql, []] call DB_fnc_dbExecute;
     };
 
     case "checktimerange": {
         _params params [["_start", "", [""]], ["_end", "", [""]]];
-        private _sql = format ["SELECT (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'US/Eastern')::time BETWEEN '%1:30:00' AND '%2:30:00'", _start, _end];
+        // 返回 1 或 0 而不是布尔值，避免 parseSimpleArray 解析错误
+        private _sql = format ["SELECT CASE WHEN (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'US/Eastern')::time BETWEEN '%1:30:00' AND '%2:30:00' THEN 1 ELSE 0 END as in_range", _start, _end];
         _result = [1, "server_check_time_range", _sql, []] call DB_fnc_dbExecute;
     };
 

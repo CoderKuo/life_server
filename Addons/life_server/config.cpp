@@ -180,6 +180,8 @@ class CfgFunctions {
 			class AdvancedLog {};  //日志
 			class buyLicenseServer {};  // 许可证购买服务端验证
 			class insertVehicle {};  // 从 MySQL 目录迁移
+			class casinoServer {};  // 赌场服务器端验证
+			class inventoryServer {};  // 库存服务器端验证
 		};
 
 		class Wanted_Sys {

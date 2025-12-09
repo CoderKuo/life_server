@@ -37,8 +37,10 @@ switch (toLower _method) do {
             ["_fromName", "", [""]],
             ["_toName", "", [""]]
         ];
-        private _sql = "INSERT INTO messages (fromID, toID, message, fromName, toName) VALUES('%1', '%2', '\"\"%3\"\"', '%4', '%5')";
-        _result = [2, "message_insert", _sql, [_fromId, _toId, _message, _fromName, _toName]] call DB_fnc_dbExecute;
+        // 对消息内容进行转义，防止 SQL 注入
+        private _escapedMessage = _message regexReplace ["'", "''"];
+        private _sql = format ["INSERT INTO messages (fromID, toID, message, fromName, toName) VALUES('%1', '%2', '%3', '%4', '%5')", _fromId, _toId, _escapedMessage, _fromName, _toName];
+        _result = [2, "message_insert", _sql, []] call DB_fnc_dbExecute;
     };
 
     default {

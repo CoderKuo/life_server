@@ -220,9 +220,9 @@ switch (toLower _method) do {
         private _bankClean = parseNumber _bankStr;
         // 调试日志
         diag_log format ["[PlayerMapper:updatebank] pid=%1, original=%2, cleaned=%3, parsed=%4", _pid, _bank, _bankStr, _bankClean];
-        // 安全检查：阻止将银行余额设为0（除非明确允许）
-        if (_bankClean <= 0) exitWith {
-            diag_log format ["[PlayerMapper:updatebank] BLOCKED! Refusing to set bank to %1 for player %2", _bankClean, _pid];
+        // 安全检查：允许余额为0，但阻止负数 (修复P2问题)
+        if (_bankClean < 0) exitWith {
+            diag_log format ["[PlayerMapper:updatebank] BLOCKED! Refusing to set bank to negative value %1 for player %2", _bankClean, _pid];
             _result = false;
         };
         // 使用整数格式避免科学计数法
@@ -450,6 +450,18 @@ switch (toLower _method) do {
         ];
         private _sql = format ["UPDATE players SET bankacc=bankacc+%1 WHERE playerid='%%1'", _amount];
         _result = [2, "player_increment_bank", _sql, [_pid]] call DB_fnc_dbExecute;
+    };
+
+    case "getbank": {
+        _params params [["_pid", "", [""]]];
+        private _sql = "SELECT bankacc FROM players WHERE playerid='%1'";
+        _result = [1, "player_get_bank", _sql, [_pid]] call DB_fnc_dbExecute;
+    };
+
+    case "getcash": {
+        _params params [["_pid", "", [""]]];
+        private _sql = "SELECT cash FROM players WHERE playerid='%1'";
+        _result = [1, "player_get_cash", _sql, [_pid]] call DB_fnc_dbExecute;
     };
 
     // ==========================================

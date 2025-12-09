@@ -29,8 +29,9 @@ if (_price == -1 && !((_house getVariable ["for_sale",""]) isEqualTo "")) exitWi
 	[["oev_action_inUse",false],"OEC_fnc_netSetVar",(owner _player),false] spawn OEC_fnc_MP;
 };
 if !((_house getVariable ["for_sale",""]) isEqualTo "") then {
-	// 检查拍卖状态
-	_queryResult = ["isinauction", [str _queryResult, str olympus_server]] call DB_fnc_houseMapper;
+	// 检查拍卖状态 - 使用房屋ID而不是查询结果数组
+	private _houseIdForAuction = if (_houseID != -1) then { _houseID } else { _queryResult select 0 };
+	_queryResult = ["isinauction", [str _houseIdForAuction, str olympus_server]] call DB_fnc_houseMapper;
 };
 if (!((_house getVariable ["for_sale",""]) isEqualTo "") && {_price != (_queryResult select 0)}) exitWith {
 	[[1,"Purchase request denied. Price did not match with DB. Please contact a Staff Member"],"OEC_fnc_broadcast",(owner _player),false] spawn OEC_fnc_MP;

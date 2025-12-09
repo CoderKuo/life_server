@@ -85,7 +85,8 @@ switch (_type) do {
         // 获取累积奖池
         private _jackpotKey = if (_isFlash) then { "jackpot_flash" } else { "jackpot_normal" };
         private _jackpotResult = ["lottery_get_config", [_jackpotKey]] call DB_fnc_miscMapper;
-        private _jackpot = if (isNil "_jackpotResult" || {!(_jackpotResult isEqualType [])} || {count _jackpotResult == 0}) then { 0 } else { parseNumber (_jackpotResult select 0) };
+        private _jackpotVal = if (isNil "_jackpotResult" || {!(_jackpotResult isEqualType [])} || {count _jackpotResult == 0}) then { 0 } else { _jackpotResult select 0 };
+        private _jackpot = if (_jackpotVal isEqualType 0) then { _jackpotVal } else { parseNumber _jackpotVal };
 
         private _ticketCount = count _lotteryList;
         private _uniquePlayers = [];

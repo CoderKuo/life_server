@@ -1,18 +1,17 @@
-//  File: fn_owner2Player.sqf
-//	Author: Fusah
-//	Description: Will grab plr object from client-ID FOR USE ON SERVER ONLY
+/*
+ * fn_owner2Player.sqf
+ * Author: Fusah
+ * Modified: 使用 HashMap 缓存优化
+ *
+ * Description: 根据 client-ID 获取玩家对象 (仅服务器端使用)
+ */
 
 params [
-	["_clientID",0]
+	["_clientID", 0]
 ];
 
 if !(isServer) exitWith {};
 if (_clientID isEqualTo 0) exitWith {};
 
-private _ret = objNull;
-
-{
-	if (owner _x isEqualTo _clientID) exitWith {_ret = _x};
-} forEach playableUnits;
-
-_ret;
+// 使用 HashMap 缓存 O(1) 查找
+[_clientID] call OES_fnc_getPlayerByOwner
