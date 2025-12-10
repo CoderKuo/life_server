@@ -474,13 +474,13 @@ switch (toLower _type) do {
                 ["inv_error", "银行余额不足"] remoteExec ["OEC_fnc_inventoryResult", _ownerID];
             };
             _newBank = _realBank - _totalCost;
-            ["updatebank", [_uid, str _newBank]] call DB_fnc_playerMapper;
+            ["updatebank", [_uid, ["format", _newBank] call OES_fnc_safeNumber]] call DB_fnc_playerMapper;
         } else {
             if (_realCash < _totalCost) exitWith {
                 ["inv_error", "现金不足"] remoteExec ["OEC_fnc_inventoryResult", _ownerID];
             };
             _newCash = _realCash - _totalCost;
-            ["updatecash", [_uid, str _newCash]] call DB_fnc_playerMapper;
+            ["updatecash", [_uid, ["format", _newCash] call OES_fnc_safeNumber]] call DB_fnc_playerMapper;
         };
 
         _logEvent = format ["Server Validated: Buy %1 x%2 from %3", _item, _amount, _shopType];
@@ -521,10 +521,10 @@ switch (toLower _type) do {
 
         if (_useBank) then {
             _newBank = _realBank + _totalValue;
-            ["updatebank", [_uid, str _newBank]] call DB_fnc_playerMapper;
+            ["updatebank", [_uid, ["format", _newBank] call OES_fnc_safeNumber]] call DB_fnc_playerMapper;
         } else {
             _newCash = _realCash + _totalValue;
-            ["updatecash", [_uid, str _newCash]] call DB_fnc_playerMapper;
+            ["updatecash", [_uid, ["format", _newCash] call OES_fnc_safeNumber]] call DB_fnc_playerMapper;
         };
 
         _logEvent = format ["Server Validated: Sell %1 x%2 to %3", _item, _amount, _shopType];
@@ -558,6 +558,9 @@ switch (toLower _type) do {
 
         ["updatecashbank", [_uid, str _newCash, str _newBank]] call DB_fnc_playerMapper;
 
+        // 记录ATM交易历史
+        ["addatmdeposit", [_playerName, _uid, _amount, _newBank]] call DB_fnc_bankMapper;
+
         _logEvent = format ["Server Validated: ATM Deposit %1", _amount];
         _result = ["atm_deposit_success", _amount, _newCash, _newBank];
     };
@@ -588,6 +591,9 @@ switch (toLower _type) do {
         private _newBank = _realBank - _amount;
 
         ["updatecashbank", [_uid, str _newCash, str _newBank]] call DB_fnc_playerMapper;
+
+        // 记录ATM交易历史
+        ["addatmwithdraw", [_playerName, _uid, _amount, _newBank]] call DB_fnc_bankMapper;
 
         _logEvent = format ["Server Validated: ATM Withdraw %1", _amount];
         _result = ["atm_withdraw_success", _amount, _newCash, _newBank];
@@ -624,6 +630,10 @@ switch (toLower _type) do {
             ["inv_error", "目标玩家不存在"] remoteExec ["OEC_fnc_inventoryResult", _ownerID];
         };
 
+        // 获取目标玩家名称
+        private _targetNameResult = ["getname", [_targetUID]] call DB_fnc_playerMapper;
+        private _targetName = if (count _targetNameResult > 0) then { _targetNameResult select 0 } else { "Unknown" };
+
         // 从数据库获取真实余额
         private _dbBank = ["getbank", [_uid]] call DB_fnc_playerMapper;
         private _realBank = if (count _dbBank > 0) then { [_dbBank select 0] call _fnc_toNumber } else { 0 };
@@ -635,10 +645,19 @@ switch (toLower _type) do {
 
         // 扣除发送者 (本金 + 税金)
         private _newBank = _realBank - _totalDeduct;
-        ["updatebank", [_uid, str _newBank]] call DB_fnc_playerMapper;
+        ["updatebank", [_uid, ["format", _newBank] call OES_fnc_safeNumber]] call DB_fnc_playerMapper;
 
         // 只给接收者增加本金 (税金被销毁，不转给任何人)
         ["incrementbank", [_targetUID, _amount]] call DB_fnc_playerMapper;
+
+        // 获取接收者新余额
+        private _targetBankResult = ["getbank", [_targetUID]] call DB_fnc_playerMapper;
+        private _targetNewBank = if (count _targetBankResult > 0) then { [_targetBankResult select 0] call _fnc_toNumber } else { 0 };
+
+        // 记录ATM转账历史 - 发送方
+        ["addatmtransferout", [_playerName, _uid, _amount, _newBank, _targetUID, _targetName]] call DB_fnc_bankMapper;
+        // 记录ATM转账历史 - 接收方
+        ["addatmtransferin", [_targetName, _targetUID, _amount, _targetNewBank, _uid, _playerName]] call DB_fnc_bankMapper;
 
         // 通知接收方更新余额 (使用 HashMap 缓存 O(1))
         private _targetPlayer = [_targetUID] call OES_fnc_getPlayerByUID;
@@ -649,7 +668,15 @@ switch (toLower _type) do {
         };
 
         _logEvent = format ["Server Validated: ATM Transfer %1 (tax: %2) to %3", _amount, _tax, _targetUID];
-        _result = ["atm_transfer_success", _amount, _newBank, _targetUID];
+        _result = ["atm_transfer_success", _amount, _newBank, _targetName];
+    };
+
+    // ==========================================
+    // ATM - 获取交易历史
+    // ==========================================
+    case "atm_get_history": {
+        private _history = ["getatmhistory", [_uid]] call DB_fnc_bankMapper;
+        _result = ["atm_history", _history];
     };
 
     default {

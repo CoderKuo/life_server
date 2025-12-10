@@ -22,6 +22,12 @@ switch (toLower _method) do {
         _result = [1, "player_exists", _sql, [_pid]] call DB_fnc_dbExecute;
     };
 
+    case "getname": {
+        _params params [["_pid", "", [""]]];
+        private _sql = "SELECT name FROM players WHERE playerid='%1'";
+        _result = [1, "player_get_name", _sql, [_pid]] call DB_fnc_dbExecute;
+    };
+
     case "getuid": {
         _params params [["_pid", "", [""]]];
         private _sql = "SELECT uid FROM players WHERE playerid='%1'";
@@ -174,10 +180,11 @@ switch (toLower _method) do {
             ["_cash", "", [""]],
             ["_bank", "", [""]]
         ];
-        private _cashClean = parseNumber _cash;
-        private _bankClean = parseNumber _bank;
-        private _sql = "UPDATE players SET name='%2', cash=%3, bankacc=%4 WHERE playerid='%1'";
-        _result = [2, "player_update_basic", _sql, [_pid, _name, _cashClean, _bankClean]] call DB_fnc_dbExecute;
+        // 使用安全数字函数避免科学计数法
+        private _cashSafe = ["format", _cash] call OES_fnc_safeNumber;
+        private _bankSafe = ["format", _bank] call OES_fnc_safeNumber;
+        private _sql = format ["UPDATE players SET name='%%2', cash=%1, bankacc=%2 WHERE playerid='%%1'", _cashSafe, _bankSafe];
+        _result = [2, "player_update_basic", _sql, [_pid, _name]] call DB_fnc_dbExecute;
     };
 
     case "syncwithposition": {
@@ -189,10 +196,11 @@ switch (toLower _method) do {
             ["_coordinates", "", [""]],
             ["_coordColumn", "coordinates", [""]]
         ];
-        private _cashClean = parseNumber _cash;
-        private _bankClean = parseNumber _bank;
-        private _sql = format ["UPDATE players SET name='%%2', cash=%%3, bankacc=%%4, %1='%%5'::jsonb WHERE playerid='%%1'", _coordColumn];
-        _result = [2, "player_sync_position", _sql, [_pid, _name, _cashClean, _bankClean, _coordinates]] call DB_fnc_dbExecute;
+        // 使用安全数字函数避免科学计数法
+        private _cashSafe = ["format", _cash] call OES_fnc_safeNumber;
+        private _bankSafe = ["format", _bank] call OES_fnc_safeNumber;
+        private _sql = format ["UPDATE players SET name='%%2', cash=%1, bankacc=%2, %3='%%3'::jsonb WHERE playerid='%%1'", _cashSafe, _bankSafe, _coordColumn];
+        _result = [2, "player_sync_position", _sql, [_pid, _name, _coordinates]] call DB_fnc_dbExecute;
     };
 
     case "updatecash": {
@@ -200,13 +208,10 @@ switch (toLower _method) do {
             ["_pid", "", [""]],
             ["_cash", "", [""]]
         ];
-        // 移除逗号和其他非数字字符，然后解析
-        private _cashStr = _cash regexReplace ["[^0-9\-]", ""];
-        private _cashClean = parseNumber _cashStr;
-        // 调试日志
-        diag_log format ["[PlayerMapper:updatecash] pid=%1, original=%2, cleaned=%3, parsed=%4", _pid, _cash, _cashStr, _cashClean];
-        // 使用整数格式避免科学计数法
-        private _sql = format ["UPDATE players SET cash=%1 WHERE playerid='%2'", floor _cashClean, _pid];
+        // 使用安全数字函数避免科学计数法
+        private _cashSafe = ["format", _cash] call OES_fnc_safeNumber;
+        diag_log format ["[PlayerMapper:updatecash] pid=%1, original=%2, safe=%3", _pid, _cash, _cashSafe];
+        private _sql = format ["UPDATE players SET cash=%1 WHERE playerid='%2'", _cashSafe, _pid];
         _result = [2, "player_update_cash", _sql, []] call DB_fnc_dbExecute;
     };
 
@@ -215,18 +220,17 @@ switch (toLower _method) do {
             ["_pid", "", [""]],
             ["_bank", "", [""]]
         ];
-        // 移除逗号和其他非数字字符，然后解析
-        private _bankStr = _bank regexReplace ["[^0-9\-]", ""];
-        private _bankClean = parseNumber _bankStr;
-        // 调试日志
-        diag_log format ["[PlayerMapper:updatebank] pid=%1, original=%2, cleaned=%3, parsed=%4", _pid, _bank, _bankStr, _bankClean];
-        // 安全检查：允许余额为0，但阻止负数 (修复P2问题)
-        if (_bankClean < 0) exitWith {
-            diag_log format ["[PlayerMapper:updatebank] BLOCKED! Refusing to set bank to negative value %1 for player %2", _bankClean, _pid];
+        // 使用安全数字函数避免科学计数法
+        private _bankSafe = ["format", _bank] call OES_fnc_safeNumber;
+        diag_log format ["[PlayerMapper:updatebank] pid=%1, original=%2, safe=%3", _pid, _bank, _bankSafe];
+
+        // 安全检查：阻止负数
+        if (_bankSafe select [0,1] == "-") exitWith {
+            diag_log format ["[PlayerMapper:updatebank] BLOCKED! Refusing to set bank to negative value %1 for player %2", _bankSafe, _pid];
             _result = false;
         };
-        // 使用整数格式避免科学计数法
-        private _sql = format ["UPDATE players SET bankacc=%1 WHERE playerid='%2'", floor _bankClean, _pid];
+
+        private _sql = format ["UPDATE players SET bankacc=%1 WHERE playerid='%2'", _bankSafe, _pid];
         _result = [2, "player_update_bank", _sql, []] call DB_fnc_dbExecute;
     };
 
@@ -236,15 +240,11 @@ switch (toLower _method) do {
             ["_cash", "", [""]],
             ["_bank", "", [""]]
         ];
-        // 移除逗号和其他非数字字符，然后解析
-        private _cashStr = _cash regexReplace ["[^0-9\-]", ""];
-        private _bankStr = _bank regexReplace ["[^0-9\-]", ""];
-        private _cashClean = parseNumber _cashStr;
-        private _bankClean = parseNumber _bankStr;
-        // 调试日志
-        diag_log format ["[PlayerMapper:updatecashbank] pid=%1, cash=%2->%3, bank=%4->%5", _pid, _cash, _cashClean, _bank, _bankClean];
-        // 使用整数格式避免科学计数法
-        private _sql = format ["UPDATE players SET cash=%1, bankacc=%2 WHERE playerid='%3'", floor _cashClean, floor _bankClean, _pid];
+        // 使用安全数字函数避免科学计数法
+        private _cashSafe = ["format", _cash] call OES_fnc_safeNumber;
+        private _bankSafe = ["format", _bank] call OES_fnc_safeNumber;
+        diag_log format ["[PlayerMapper:updatecashbank] pid=%1, cash=%2->%3, bank=%4->%5", _pid, _cash, _cashSafe, _bank, _bankSafe];
+        private _sql = format ["UPDATE players SET cash=%1, bankacc=%2 WHERE playerid='%3'", _cashSafe, _bankSafe, _pid];
         _result = [2, "player_update_cash_bank", _sql, []] call DB_fnc_dbExecute;
     };
 
@@ -439,8 +439,10 @@ switch (toLower _method) do {
             ["_pid", "", [""]],
             ["_amount", 0, [0]]
         ];
-        private _sql = "UPDATE players SET deposit_box=deposit_box+%2 WHERE playerid='%1'";
-        _result = [2, "player_update_deposit_box", _sql, [_pid, _amount]] call DB_fnc_dbExecute;
+        // 使用安全数字函数确保整数格式
+        private _amountSafe = ["format", _amount] call OES_fnc_safeNumber;
+        private _sql = format ["UPDATE players SET deposit_box=deposit_box+%1 WHERE playerid='%%1'", _amountSafe];
+        _result = [2, "player_update_deposit_box", _sql, [_pid]] call DB_fnc_dbExecute;
     };
 
     case "incrementbank": {
@@ -448,7 +450,9 @@ switch (toLower _method) do {
             ["_pid", "", [""]],
             ["_amount", 0, [0]]
         ];
-        private _sql = format ["UPDATE players SET bankacc=bankacc+%1 WHERE playerid='%%1'", _amount];
+        // 使用安全数字函数确保整数格式
+        private _amountSafe = ["format", _amount] call OES_fnc_safeNumber;
+        private _sql = format ["UPDATE players SET bankacc=bankacc+%1 WHERE playerid='%%1'", _amountSafe];
         _result = [2, "player_increment_bank", _sql, [_pid]] call DB_fnc_dbExecute;
     };
 
@@ -462,6 +466,12 @@ switch (toLower _method) do {
         _params params [["_pid", "", [""]]];
         private _sql = "SELECT cash FROM players WHERE playerid='%1'";
         _result = [1, "player_get_cash", _sql, [_pid]] call DB_fnc_dbExecute;
+    };
+
+    case "getadminlevel": {
+        _params params [["_pid", "", [""]]];
+        private _sql = "SELECT adminlevel FROM players WHERE playerid='%1'";
+        _result = [1, "player_get_admin_level", _sql, [_pid]] call DB_fnc_dbExecute;
     };
 
     // ==========================================

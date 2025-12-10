@@ -1,6 +1,6 @@
 /* Version: 1.0.0 */
 #include <macro.h>
-#define EXTDB_FAILED(MESSAGE) \
+#define DB_FAILED(MESSAGE) \
 	life_server_extDB_notLoaded = ##MESSAGE; \
 	publicVariable "life_server_extDB_notLoaded";
 
@@ -8,16 +8,8 @@
  * ============================================
  * 数据库后端配置
  * ============================================
- * 设置 life_db_backend 来选择数据库后端:
- *   "extdb3" - 使用 MySQL (extDB3) [默认]
- *   "pgsql"  - 使用 PostgreSQL (arma3_pgsql)
- *
- * 设置 life_db_auto_convert 来控制 SQL 语法自动转换:
- *   true  - 自动将 MySQL 语法转换为 PostgreSQL [默认]
- *   false - 不进行转换（需要手动确保 SQL 兼容）
+ * 使用 PostgreSQL (arma3_pgsql) 作为数据库后端
  */
-life_db_backend = "pgsql";      // 修改为 "pgsql" 以使用 PostgreSQL
-life_db_auto_convert = false;    // 已迁移到 Mapper 原生 PostgreSQL 语法，无需自动转换
 life_pgsql_protocol = "SQL_MAIN"; // PostgreSQL 协议名称
 
 DB_Async_Active = false;
@@ -86,112 +78,75 @@ publicVariable "mc_phone_groups";
  * ============================================
  * 数据库初始化
  * ============================================
- * 根据 life_db_backend 变量选择初始化 extDB3 或 arma3_pgsql
+ * 使用 PostgreSQL (arma3_pgsql)
  */
 
-if (life_db_backend isEqualTo "pgsql") then {
-	// ==========================================
-	// PostgreSQL 初始化 (arma3_pgsql)
-	// ==========================================
-	"[PGSQL] 正在初始化 PostgreSQL 数据库连接..." call OES_fnc_diagLog;
+// ==========================================
+// PostgreSQL 初始化 (arma3_pgsql)
+// ==========================================
+"[PGSQL] 正在初始化 PostgreSQL 数据库连接..." call OES_fnc_diagLog;
 
-	if(isNil {uiNamespace getVariable "life_pgsql_initialized"}) then {
-		// 检查扩展是否加载
-		if !([] call PGSQL_fnc_isLoaded) exitWith {
-			EXTDB_FAILED("arma3-pgsql 扩展未加载，请检查服务器配置");
-		};
-
-		// 获取版本
-		private _version = [] call PGSQL_fnc_version;
-		format["[PGSQL] arma3-pgsql Version: %1", _version] call OES_fnc_diagLog;
-
-		// 添加数据库连接 (使用 ini 文件中的 [Database2] 配置节)
-		private _dbResult = ["Database2"] call PGSQL_fnc_addDatabase;
-		if ((_dbResult select 0) != 1) exitWith {
-			EXTDB_FAILED(format["arma3-pgsql: 数据库连接失败 - %1", _dbResult select 1]);
-		};
-		"[PGSQL] 数据库连接成功" call OES_fnc_diagLog;
-
-		// 添加 SQL 协议 (参数: 数据库ID, 协议类型, 协议名称, 初始化选项)
-		// TEXT 选项: 让 VARCHAR/TEXT 类型的值加上引号，避免大数字被解析为科学计数法
-		private _protoResult = ["Database2", "SQL", life_pgsql_protocol, "TEXT"] call PGSQL_fnc_addProtocol;
-		if ((_protoResult select 0) != 1) exitWith {
-			EXTDB_FAILED(format["arma3-pgsql: 协议添加失败 - %1", _protoResult select 1]);
-		};
-		format["[PGSQL] SQL 协议 '%1' 已添加 (TEXT模式)", life_pgsql_protocol] call OES_fnc_diagLog;
-
-		// 锁定扩展
-		["LOCK"] call PGSQL_fnc_lock;
-		"[PGSQL] 扩展已锁定" call OES_fnc_diagLog;
-
-		uiNamespace setVariable ["life_pgsql_initialized", true];
-		"[PGSQL] PostgreSQL 初始化完成!" call OES_fnc_diagLog;
-	} else {
-		"[PGSQL] 已存在初始化的 PostgreSQL 连接" call OES_fnc_diagLog;
+if(isNil {uiNamespace getVariable "life_pgsql_initialized"}) then {
+	// 检查扩展是否加载
+	if !([] call PGSQL_fnc_isLoaded) exitWith {
+		DB_FAILED("arma3-pgsql 扩展未加载，请检查服务器配置");
 	};
 
-	// 为兼容性设置一个假的 life_sql_id
-	life_sql_id = {life_pgsql_protocol};
-	__CONST__(life_sql_id,life_sql_id);
+	// 获取版本
+	private _version = [] call PGSQL_fnc_version;
+	format["[PGSQL] arma3-pgsql Version: %1", _version] call OES_fnc_diagLog;
 
-	// ==========================================
-	// Create DB_fnc_* aliases for backward compatibility
-	// Functions are now compiled as OES_fnc_* but many files reference DB_fnc_*
-	// ==========================================
+	// 添加数据库连接 (使用 ini 文件中的 [Database2] 配置节)
+	private _dbResult = ["Database2"] call PGSQL_fnc_addDatabase;
+	if ((_dbResult select 0) != 1) exitWith {
+		DB_FAILED(format["arma3-pgsql: 数据库连接失败 - %1", _dbResult select 1]);
+	};
+	"[PGSQL] 数据库连接成功" call OES_fnc_diagLog;
 
-	// Debug: Check which OES functions exist
-	format["[PGSQL_DEBUG] OES_fnc_dbExecute isNil: %1", isNil "OES_fnc_dbExecute"] call OES_fnc_diagLog;
-	format["[PGSQL_DEBUG] OES_fnc_dbConfig isNil: %1", isNil "OES_fnc_dbConfig"] call OES_fnc_diagLog;
-	format["[PGSQL_DEBUG] OES_fnc_vehicleMapper isNil: %1", isNil "OES_fnc_vehicleMapper"] call OES_fnc_diagLog;
-	format["[PGSQL_DEBUG] OES_fnc_gangMapper isNil: %1", isNil "OES_fnc_gangMapper"] call OES_fnc_diagLog;
-	format["[PGSQL_DEBUG] OES_fnc_miscMapper isNil: %1", isNil "OES_fnc_miscMapper"] call OES_fnc_diagLog;
-	format["[PGSQL_DEBUG] OES_fnc_marketMapper isNil: %1", isNil "OES_fnc_marketMapper"] call OES_fnc_diagLog;
-	format["[PGSQL_DEBUG] OES_fnc_houseMapper isNil: %1", isNil "OES_fnc_houseMapper"] call OES_fnc_diagLog;
+	// 添加 SQL 协议 (参数: 数据库ID, 协议类型, 协议名称, 初始化选项)
+	// TEXT 选项: 让 VARCHAR/TEXT 类型的值加上引号，避免大数字被解析为科学计数法
+	private _protoResult = ["Database2", "SQL", life_pgsql_protocol, "TEXT"] call PGSQL_fnc_addProtocol;
+	if ((_protoResult select 0) != 1) exitWith {
+		DB_FAILED(format["arma3-pgsql: 协议添加失败 - %1", _protoResult select 1]);
+	};
+	format["[PGSQL] SQL 协议 '%1' 已添加 (TEXT模式)", life_pgsql_protocol] call OES_fnc_diagLog;
 
-	DB_fnc_dbExecute = OES_fnc_dbExecute;
-	DB_fnc_dbConfig = OES_fnc_dbConfig;
-	DB_fnc_parseJsonb = OES_fnc_parseJsonb;
-	DB_fnc_playerMapper = OES_fnc_playerMapper;
-	DB_fnc_vehicleMapper = OES_fnc_vehicleMapper;
-	DB_fnc_houseMapper = OES_fnc_houseMapper;
-	DB_fnc_gangMapper = OES_fnc_gangMapper;
-	DB_fnc_miscMapper = OES_fnc_miscMapper;
-	DB_fnc_conquestMapper = OES_fnc_conquestMapper;
-	DB_fnc_marketMapper = OES_fnc_marketMapper;
-	DB_fnc_messageMapper = OES_fnc_messageMapper;
-	DB_fnc_logMapper = OES_fnc_logMapper;
-	"[PGSQL] DB_fnc_* aliases created for backward compatibility" call OES_fnc_diagLog;
+	// 锁定扩展
+	["LOCK"] call PGSQL_fnc_lock;
+	"[PGSQL] 扩展已锁定" call OES_fnc_diagLog;
 
-	// Initialize Database Mapper layer
-	[] call DB_fnc_dbConfig;
-	"[PGSQL] Database Mapper layer initialized" call OES_fnc_diagLog;
-
+	uiNamespace setVariable ["life_pgsql_initialized", true];
+	"[PGSQL] PostgreSQL 初始化完成!" call OES_fnc_diagLog;
 } else {
-	// ==========================================
-	// extDB3 初始化 (MySQL) - 原始代码
-	// ==========================================
-	"[extDB3] 正在初始化 MySQL 数据库连接..." call OES_fnc_diagLog;
-
-	if(isNil {uiNamespace getVariable "life_sql_id"}) then {
-		life_sql_id = round(random(9999));
-		__CONST__(life_sql_id,life_sql_id);
-		uiNamespace setVariable ["life_sql_id",life_sql_id];
-
-		_result = "extDB3" callExtension "9:VERSION";
-		format["extDB3: Version: %1",_result] call OES_fnc_diagLog;
-		if(_result isEqualTo "") exitWith {EXTDB_FAILED("The server-side extension extDB was not loaded into the engine, report this to the server admin.")};
-		_result = "extDB3" callExtension format["9:ADD_DATABASE:%1","Database2"];
-		if(!(_result isEqualTo "[1]")) exitWith {EXTDB_FAILED("extDB: Error with Database Connection 1. Contact an administrator.")};
-		_result = "extDB3" callExtension format["9:ADD_DATABASE_PROTOCOL:Database2:SQL:%1:TEXT2",__GETC__(life_sql_id)];
-		if(!(_result isEqualTo "[1]")) exitWith {EXTDB_FAILED("extDB: Error with Database Connection 2. Contact an administrator.")};
-
-		"extDB3" callExtension "9:LOCK";
-		"[extDB3] MySQL 初始化完成!" call OES_fnc_diagLog;
-	} else {
-		life_sql_id = uiNamespace getVariable "life_sql_id";
-		__CONST__(life_sql_id,life_sql_id);
-	};
+	"[PGSQL] 已存在初始化的 PostgreSQL 连接" call OES_fnc_diagLog;
 };
+
+// 为兼容性设置一个假的 life_sql_id
+life_sql_id = {life_pgsql_protocol};
+__CONST__(life_sql_id,life_sql_id);
+
+// ==========================================
+// Create DB_fnc_* aliases for backward compatibility
+// Functions are now compiled as OES_fnc_* but many files reference DB_fnc_*
+// ==========================================
+DB_fnc_dbExecute = OES_fnc_dbExecute;
+DB_fnc_dbConfig = OES_fnc_dbConfig;
+DB_fnc_parseJsonb = OES_fnc_parseJsonb;
+DB_fnc_playerMapper = OES_fnc_playerMapper;
+DB_fnc_vehicleMapper = OES_fnc_vehicleMapper;
+DB_fnc_houseMapper = OES_fnc_houseMapper;
+DB_fnc_gangMapper = OES_fnc_gangMapper;
+DB_fnc_bankMapper = OES_fnc_bankMapper;
+DB_fnc_miscMapper = OES_fnc_miscMapper;
+DB_fnc_conquestMapper = OES_fnc_conquestMapper;
+DB_fnc_marketMapper = OES_fnc_marketMapper;
+DB_fnc_messageMapper = OES_fnc_messageMapper;
+DB_fnc_logMapper = OES_fnc_logMapper;
+"[PGSQL] DB_fnc_* aliases created for backward compatibility" call OES_fnc_diagLog;
+
+// Initialize Database Mapper layer
+[] call DB_fnc_dbConfig;
+"[PGSQL] Database Mapper layer initialized" call OES_fnc_diagLog;
 
 if(!(life_server_extDB_notLoaded isEqualTo "")) exitWith {};
 

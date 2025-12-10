@@ -106,16 +106,18 @@ if (_cash < _price && _bank < _price) exitWith {
 // 同时更新数据库和客户端变量
 if (_cash >= _price) then {
 	private _newCash = _cash - _price;
-	// 更新数据库
-	["updatecash", [_uid, str _newCash]] call DB_fnc_playerMapper;
+	// 更新数据库 - 使用安全数字函数
+	private _newCashStr = ["format", _newCash] call OES_fnc_safeNumber;
+	["updatecash", [_uid, _newCashStr]] call DB_fnc_playerMapper;
 	// 同步到客户端
 	["oev_cash", _newCash] remoteExec ["OEC_fnc_netSetVar", _ownerID, false];
 	["oev_cache_cash", _newCash] remoteExec ["OEC_fnc_netSetVar", _ownerID, false];
 	format ["-LICENSE- Deducted $%1 from cash. New balance: $%2", _price, _newCash] call OES_fnc_diagLog;
 } else {
 	private _newBank = _bank - _price;
-	// 更新数据库
-	["updatebank", [_uid, str _newBank]] call DB_fnc_playerMapper;
+	// 更新数据库 - 使用安全数字函数
+	private _newBankStr = ["format", _newBank] call OES_fnc_safeNumber;
+	["updatebank", [_uid, _newBankStr]] call DB_fnc_playerMapper;
 	// 同步到客户端
 	["oev_bankacc", _newBank] remoteExec ["OEC_fnc_netSetVar", _ownerID, false];
 	["oev_cache_bankacc", _newBank] remoteExec ["OEC_fnc_netSetVar", _ownerID, false];

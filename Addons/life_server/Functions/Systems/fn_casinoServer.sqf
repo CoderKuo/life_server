@@ -27,18 +27,26 @@ if (!alive _player) exitWith {
     ["casino_error", "你已死亡"] remoteExec ["OEC_fnc_casinoResult", _ownerID];
 };
 
-// 验证下注金额
-if (_betAmount <= 0) exitWith {
+// 验证下注金额 (只对需要下注的操作)
+private _requiresBet = toLower _type in ["slots", "roulette", "blackjack_deal"];
+if (_requiresBet && _betAmount <= 0) exitWith {
     ["casino_error", "无效的下注金额"] remoteExec ["OEC_fnc_casinoResult", _ownerID];
 };
 
-// 从数据库获取玩家当前银行余额
-private _bankResult = ["getbank", [_uid]] call DB_fnc_playerMapper;
-private _currentBank = if (count _bankResult > 0) then { _bankResult select 0 } else { 0 };
+// 从数据库获取玩家当前银行余额 (只在需要时)
+private _currentBank = 0;
+if (_requiresBet) then {
+    private _bankResult = ["getbank", [_uid]] call DB_fnc_playerMapper;
+    _currentBank = if (count _bankResult > 0) then { _bankResult select 0 } else { 0 };
 
-// 验证玩家是否有足够资金
-if (_currentBank < _betAmount) exitWith {
-    ["casino_error", "银行余额不足"] remoteExec ["OEC_fnc_casinoResult", _ownerID];
+    // 验证玩家是否有足够资金
+    if (_currentBank < _betAmount) exitWith {
+        ["casino_error", "银行余额不足"] remoteExec ["OEC_fnc_casinoResult", _ownerID];
+    };
+} else {
+    // 对于继续游戏的操作，从游戏状态获取余额
+    private _bankResult = ["getbank", [_uid]] call DB_fnc_playerMapper;
+    _currentBank = if (count _bankResult > 0) then { _bankResult select 0 } else { 0 };
 };
 
 private _result = [];
@@ -470,33 +478,38 @@ switch (toLower _type) do {
 
 // 处理资金变化
 if (count _result > 0 && !(_result select 0 in ["blackjack_deal_result", "blackjack_hit_result", "blackjack_double_result"])) then {
-    // 游戏结束，处理资金
-    private _netChange = _winAmount - _betAmount;
+    // 检查是否为21点结算（已在发牌时扣款）
+    private _isBlackjackSettle = (_result select 0) in ["blackjack_stand_result"];
+
+    // 对于21点：发牌时已扣款，结算时只需返还赢取金额
+    // 对于其他游戏：正常计算 netChange
+    private _netChange = 0;
+    if (_isBlackjackSettle) then {
+        // 21点结算：只返还赢取金额（输了=0，平局=本金，赢了=本金*2）
+        _netChange = _winAmount;
+    } else {
+        // 其他游戏（老虎机、轮盘）：正常计算差额
+        _netChange = _winAmount - _betAmount;
+    };
 
     // 更新数据库
     if (_netChange != 0) then {
-        if (_netChange > 0) then {
-            // 玩家赢了
-            ["incrementbank", [_uid, _netChange]] call DB_fnc_playerMapper;
-        } else {
-            // 玩家输了 (扣款)
-            ["incrementbank", [_uid, _netChange]] call DB_fnc_playerMapper;
-        };
+        ["incrementbank", [_uid, _netChange]] call DB_fnc_playerMapper;
     };
 
     // 记录日志
-    // 参数: [player, action, actionValue, actionId, instanceId]
-    [_player, "casino", format ["%1 | bet:%2 win:%3 net:%4", _logEvent, _betAmount, _winAmount, _netChange], 0, 1] call OES_fnc_AdvancedLog;
+    private _profit = if (_isBlackjackSettle) then { _winAmount - _betAmount } else { _netChange };
+    [_player, "casino", format ["%1 | bet:%2 win:%3 net:%4", _logEvent, _betAmount, _winAmount, _profit], 0, 1] call OES_fnc_AdvancedLog;
 
-    // 更新统计
+    // 更新统计 - 使用安全数字函数避免科学计数法
     if (_winAmount > _betAmount) then {
         // 更新赌场赢取统计
-        private _statWin = _winAmount - _betAmount;
+        private _statWin = ["format", _winAmount - _betAmount] call OES_fnc_safeNumber;
         [format ["UPDATE stats SET casino_winnings = casino_winnings + %1, casino_uses = casino_uses + 1 WHERE playerid='%2'", _statWin, _uid], 2] call OES_fnc_asyncCall;
     } else {
         if (_winAmount < _betAmount) then {
             // 更新赌场损失统计
-            private _statLoss = _betAmount - _winAmount;
+            private _statLoss = ["format", _betAmount - _winAmount] call OES_fnc_safeNumber;
             [format ["UPDATE stats SET casino_losses = casino_losses + %1, casino_uses = casino_uses + 1 WHERE playerid='%2'", _statLoss, _uid], 2] call OES_fnc_asyncCall;
         } else {
             // 平局，只更新使用次数

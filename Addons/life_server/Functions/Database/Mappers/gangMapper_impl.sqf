@@ -58,12 +58,10 @@ switch (toLower _method) do {
 
     case "updategangbank": {
         _params params [["_gangId", "", [""]], ["_amount", "", [""]]];
-        // 移除逗号和其他非数字字符，然后解析，避免科学计数法
-        private _amountStr = _amount regexReplace ["[^0-9\-]", ""];
-        private _amountClean = parseNumber _amountStr;
-        diag_log format ["[GangMapper:updategangbank] gangId=%1, original=%2, cleaned=%3", _gangId, _amount, _amountClean];
-        // 使用整数格式避免科学计数法
-        private _sql = format ["UPDATE gangs SET bank=%1 WHERE id='%2'", floor _amountClean, _gangId];
+        // 使用安全数字函数避免科学计数法
+        private _amountSafe = ["format", _amount] call OES_fnc_safeNumber;
+        diag_log format ["[GangMapper:updategangbank] gangId=%1, original=%2, safe=%3", _gangId, _amount, _amountSafe];
+        private _sql = format ["UPDATE gangs SET bank=%1 WHERE id='%2'", _amountSafe, _gangId];
         _result = [2, "gang_update_bank", _sql, []] call DB_fnc_dbExecute;
     };
 
@@ -277,23 +275,21 @@ switch (toLower _method) do {
     };
 
     // ==========================================
-    // Bank History Operations
+    // Bank History Operations (Gang)
     // ==========================================
 
     case "getbankhistory": {
         _params params [["_gangId", "", [""]]];
-        private _sql = "SELECT name, playerid::text, type, amount FROM gangbankhistory WHERE gangid='%1' ORDER BY timestamp DESC LIMIT 20";
+        private _sql = "SELECT name, playerid::text, type, amount FROM bank_history WHERE gangid='%1' ORDER BY timestamp DESC LIMIT 20";
         _result = [1, "gang_get_bank_history", _sql, [_gangId], true] call DB_fnc_dbExecute;
     };
 
     case "addbankhistory": {
         _params params [["_name", "", [""]], ["_pid", "", [""]], ["_type", "", [""]], ["_amount", "", [""]], ["_gangId", "", [""]]];
-        // 移除逗号和其他非数字字符，然后解析，避免科学计数法
-        private _amountStr = _amount regexReplace ["[^0-9\-]", ""];
-        private _amountClean = parseNumber _amountStr;
-        diag_log format ["[GangMapper:addbankhistory] gangId=%1, amount=%2->%3", _gangId, _amount, _amountClean];
-        // 使用整数格式避免科学计数法
-        private _sql = format ["INSERT INTO gangbankhistory (name,playerid,type,amount,gangid) VALUES('%%1','%%2','%%3',%1,'%%4')", floor _amountClean];
+        // 使用安全数字函数避免科学计数法
+        private _amountSafe = ["format", _amount] call OES_fnc_safeNumber;
+        diag_log format ["[GangMapper:addbankhistory] gangId=%1, amount=%2->%3", _gangId, _amount, _amountSafe];
+        private _sql = format ["INSERT INTO bank_history (name,playerid,type,amount,gangid) VALUES('%%1','%%2','%%3',%1,'%%4')", _amountSafe];
         _result = [2, "gang_add_bank_history", _sql, [_name, _pid, _type, _gangId]] call DB_fnc_dbExecute;
     };
 

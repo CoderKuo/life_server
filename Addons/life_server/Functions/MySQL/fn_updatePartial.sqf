@@ -20,21 +20,41 @@ switch(_mode) do {
 	case 0: {
 		_value = param [2,0,[0]];
 		format["Player %1 partial sync. Side: %2, Cash: $%3",_uid, _side, [_value] call OEC_fnc_numberText] call OES_fnc_diagLog;
-		_value = str ([_value] call OES_fnc_numberToString);
+		// 直接使用 OES_fnc_safeNumber 转换，不要用 str 包装（会导致双引号问题）
+		_value = ["format", _value] call OES_fnc_safeNumber;
 		["updatecash", [_uid, _value]] call DB_fnc_playerMapper;
 	};
 
 	// Case 1: Update bank only
 	case 1: {
 		_value = param [2,0,[0]];
-		// 添加详细调试日志 - 追踪银行更新来源
-		format["[DEBUG BANK UPDATE] Player %1, Side: %2, New Bank Value: $%3, remoteExecutedOwner: %4", _uid, _side, _value, remoteExecutedOwner] call OES_fnc_diagLog;
-		// 如果银行值为0或负数，阻止更新（可能是bug）
-		if (_value <= 0) exitWith {
-			format["[WARNING] Bank update BLOCKED for player %1! Value is %2 (likely a bug). Full params: %3", _uid, _value, _this] call OES_fnc_diagLog;
+
+		// 如果是负数，直接阻止
+		if (_value < 0) exitWith {
+			format["[WARNING] Bank update BLOCKED for player %1! Negative value %2", _uid, _value] call OES_fnc_diagLog;
 		};
-		format["Player %1 partial sync. Side: %2, Bank: $%3",_uid, _side, [_value] call OEC_fnc_numberText] call OES_fnc_diagLog;
-		_value = str ([_value] call OES_fnc_numberToString);
+
+		// 获取数据库中的当前余额
+		private _dbResult = ["getbank", [_uid]] call DB_fnc_playerMapper;
+		private _currentBank = if (count _dbResult > 0) then { parseNumber (str (_dbResult select 0)) } else { 0 };
+
+		// 计算变化量
+		private _change = _currentBank - _value;
+
+		// 调试日志
+		format["[DEBUG BANK UPDATE] Player %1, Side: %2, DB: $%3 -> Client: $%4 (change: %5), remoteExecutedOwner: %6",
+			_uid, _side, _currentBank, _value, _change, remoteExecutedOwner] call OES_fnc_diagLog;
+
+		// 安全检查：如果客户端说余额是0，但数据库有钱
+		// 这可能是Bug，记录警告但仍然允许更新（因为可能是合法消费）
+		// 真正的反作弊应该在具体的购买逻辑中做服务端验证
+		if (_value == 0 && _currentBank > 0) then {
+			format["[SECURITY NOTICE] Player %1 bank going from $%2 to $0. This may be legitimate spending or a bug.", _uid, _currentBank] call OES_fnc_diagLog;
+		};
+
+		// 允许更新 - 因为我们无法在这里判断是否合法
+		// 重要购买操作应该有自己的服务端验证逻辑
+		_value = ["format", _value] call OES_fnc_safeNumber;
 		["updatebank", [_uid, _value]] call DB_fnc_playerMapper;
 	};
 
@@ -87,8 +107,9 @@ switch(_mode) do {
 		_value1 = param [2,0,[0]];
 		_value2 = param [4,0,[0]];
 		format["Player %1 partial sync. Side: %2, Cash: $%3, Bank: $%4",_uid, _side, [_value1] call OEC_fnc_numberText, [_value2] call OEC_fnc_numberText] call OES_fnc_diagLog;
-		_value1 = str ([_value1] call OES_fnc_numberToString);
-		_value2 = str ([_value2] call OES_fnc_numberToString);
+		// 直接使用 OES_fnc_safeNumber 转换，不要用 str 包装（会导致双引号问题）
+		_value1 = ["format", _value1] call OES_fnc_safeNumber;
+		_value2 = ["format", _value2] call OES_fnc_safeNumber;
 		["updatecashbank", [_uid, _value1, _value2]] call DB_fnc_playerMapper;
 	};
 

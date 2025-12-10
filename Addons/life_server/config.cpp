@@ -182,6 +182,8 @@ class CfgFunctions {
 			class insertVehicle {};  // 从 MySQL 目录迁移
 			class casinoServer {};  // 赌场服务器端验证
 			class inventoryServer {};  // 库存服务器端验证
+			class adminGiveMoney {};  // 管理员电汇服务端验证
+			class dpFinishServer {};  // 快递任务完成服务端验证
 		};
 
 		class Wanted_Sys {
@@ -221,10 +223,7 @@ class CfgFunctions {
 			class mresArray {};
 			class queryRequest{};
 			class asyncCall{};
-			class asyncCall_extdb3 {};  // extDB3 原始实现
-			class asyncCall_pgsql {};   // PostgreSQL 兼容层
-			class mysqlToPgsql {};      // MySQL->PostgreSQL 语法转换
-			class dbRouter {};          // 数据库路由器
+			class asyncCall_pgsql {};   // PostgreSQL 实现
 			class insertRequest{};
 			class updateRequest{};
 			class mresToArray {};
@@ -233,7 +232,6 @@ class CfgFunctions {
 			class mresString {};
 			class updatePartial {};
 			class dateToArray {};
-			// PostgreSQL escape functions (temporary location until MySQL migration complete)
 			class escapeString {};
 			class escapeArray {};
 			class numberToString {};
@@ -359,12 +357,19 @@ class CfgFunctions {
 			class parseJsonb {};
 		};
 
+		class Database_Utils {
+			file = "\life_server\Functions\Database";
+			class safeNumber {};
+			class numberToString {};
+		};
+
 		class Database_Mappers {
 			file = "\life_server\Functions\Database\Mappers";
 			class playerMapper {};
 			class vehicleMapper {};
 			class houseMapper {};
 			class gangMapper {};
+			class bankMapper {};
 			class miscMapper {};
 			class conquestMapper {};
 			class marketMapper {};
