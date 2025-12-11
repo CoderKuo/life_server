@@ -49,7 +49,7 @@ olympus_server = switch (profileName) do {
 publicVariable "olympus_server";
 
 if (profileName == format ["OlympusServer%1",olympus_server]) then {
-	format ["这是奥林巴斯服务器 %1",olympus_server] call OES_fnc_diagLog;
+	format ["这是地球都市服务器 %1",olympus_server] call OES_fnc_diagLog;
 } else {
 	"!!- Something went wrong and profilename was incorrect -!!" call OES_fnc_diagLog;
 };

@@ -308,6 +308,15 @@ class CfgFunctions {
 			class apdEscortServer {};
 		};
 
+		class Placeables {
+			file = "\life_server\Functions\Placeables";
+			class spawnPlaceable {};
+			class removePlaceable {};
+			class loadHousePlaceables {};
+			class breweryGetStorage {};
+			class breweryUpdateStorage {};
+		};
+
 		class Gangs {
 			file = "\life_server\Functions\Gangs";
 			class insertGang {};
@@ -369,6 +378,7 @@ class CfgFunctions {
 			class vehicleMapper {};
 			class houseMapper {};
 			class gangMapper {};
+			class placeableMapper {};
 			class bankMapper {};
 			class miscMapper {};
 			class conquestMapper {};

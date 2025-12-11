@@ -556,10 +556,14 @@ switch (toLower _type) do {
         private _newCash = _realCash - _amount;
         private _newBank = _realBank + _amount;
 
-        ["updatecashbank", [_uid, str _newCash, str _newBank]] call DB_fnc_playerMapper;
+        // 使用 safeNumber 避免科学计数法
+        private _newCashStr = ["format", _newCash] call OES_fnc_safeNumber;
+        private _newBankStr = ["format", _newBank] call OES_fnc_safeNumber;
+
+        ["updatecashbank", [_uid, _newCashStr, _newBankStr]] call DB_fnc_playerMapper;
 
         // 记录ATM交易历史
-        ["addatmdeposit", [_playerName, _uid, _amount, _newBank]] call DB_fnc_bankMapper;
+        ["addatmdeposit", [_playerName, _uid, _amount, parseNumber _newBankStr]] call DB_fnc_bankMapper;
 
         _logEvent = format ["Server Validated: ATM Deposit %1", _amount];
         _result = ["atm_deposit_success", _amount, _newCash, _newBank];
@@ -590,10 +594,14 @@ switch (toLower _type) do {
         private _newCash = _realCash + _amount;
         private _newBank = _realBank - _amount;
 
-        ["updatecashbank", [_uid, str _newCash, str _newBank]] call DB_fnc_playerMapper;
+        // 使用 safeNumber 避免科学计数法
+        private _newCashStr = ["format", _newCash] call OES_fnc_safeNumber;
+        private _newBankStr = ["format", _newBank] call OES_fnc_safeNumber;
+
+        ["updatecashbank", [_uid, _newCashStr, _newBankStr]] call DB_fnc_playerMapper;
 
         // 记录ATM交易历史
-        ["addatmwithdraw", [_playerName, _uid, _amount, _newBank]] call DB_fnc_bankMapper;
+        ["addatmwithdraw", [_playerName, _uid, _amount, parseNumber _newBankStr]] call DB_fnc_bankMapper;
 
         _logEvent = format ["Server Validated: ATM Withdraw %1", _amount];
         _result = ["atm_withdraw_success", _amount, _newCash, _newBank];

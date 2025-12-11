@@ -28,7 +28,8 @@ switch (toLower _method) do {
 
     case "getgangbank": {
         _params params [["_gangId", "", [""]]];
-        private _sql = "SELECT bank FROM gangs WHERE id='%1'";
+        // 使用 ::text 避免科学计数法
+        private _sql = "SELECT bank::text FROM gangs WHERE id='%1'";
         _result = [1, "gang_get_bank", _sql, [_gangId]] call DB_fnc_dbExecute;
     };
 

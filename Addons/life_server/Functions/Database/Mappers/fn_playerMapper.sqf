@@ -458,13 +458,15 @@ switch (toLower _method) do {
 
     case "getbank": {
         _params params [["_pid", "", [""]]];
-        private _sql = "SELECT bankacc FROM players WHERE playerid='%1'";
+        // 使用 ::text 避免科学计数法
+        private _sql = "SELECT bankacc::text FROM players WHERE playerid='%1'";
         _result = [1, "player_get_bank", _sql, [_pid]] call DB_fnc_dbExecute;
     };
 
     case "getcash": {
         _params params [["_pid", "", [""]]];
-        private _sql = "SELECT cash FROM players WHERE playerid='%1'";
+        // 使用 ::text 避免科学计数法
+        private _sql = "SELECT cash::text FROM players WHERE playerid='%1'";
         _result = [1, "player_get_cash", _sql, [_pid]] call DB_fnc_dbExecute;
     };
 
