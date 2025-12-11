@@ -6,10 +6,28 @@
 //  Modified: 迁移到 PostgreSQL Mapper 层
 
 
+// 需要更大清理距离的载具类型 (武装/大型载具)
+if (isNil "OES_largeVehicleTypes") then {
+	OES_largeVehicleTypes = createHashMapFromArray [
+		["I_G_Offroad_01_AT_F", true],
+		["B_T_LSV_01_armed_F", true],
+		["O_T_LSV_02_armed_F", true],
+		["B_Heli_Transport_03_black_F", true],
+		["B_Heli_Transport_01_camo_F", true],
+		["B_Heli_Transport_01_F", true],
+		["C_Plane_Civil_01_racing_F", true],
+		["I_C_Offroad_02_LMG_F", true],
+		["B_G_Offroad_01_armed_F", true],
+		["I_G_Offroad_01_armed_F", true],
+		["B_T_VTOL_01_vehicle_F", true],
+		["B_T_VTOL_01_infantry_F", true],
+		["O_Heli_Transport_04_bench_F", true]
+	];
+};
+
 //alive vehicle cleanup
 [] spawn{
-private["_veh","_handle","_dbInfo","_gangID","_uid","_plate","_ill","_toDelete","_dist"];
-_ill = ["I_G_Offroad_01_AT_F","B_T_LSV_01_armed_F","O_T_LSV_02_armed_F","B_Heli_Transport_03_black_F","B_Heli_Transport_01_camo_F","B_Heli_Transport_01_F","C_Plane_Civil_01_racing_F","I_C_Offroad_02_LMG_F","B_G_Offroad_01_armed_F","I_G_Offroad_01_armed_F","B_T_VTOL_01_vehicle_F","B_T_VTOL_01_infantry_F","O_Heli_Transport_04_bench_F"];
+private["_veh","_handle","_dbInfo","_gangID","_uid","_plate","_toDelete","_dist"];
 	while{true} do {
 		uiSleep 300; // 5 minutes each loop, one to check and one to yeet the vehicle, making despawn 10 minutes total
 		_toDelete = [];
@@ -18,7 +36,7 @@ _ill = ["I_G_Offroad_01_AT_F","B_T_LSV_01_armed_F","O_T_LSV_02_armed_F","B_Heli_
 				_toDelete pushBack _forEachIndex;
 			};
 			_veh = _x;
-			if !(typeOf _veh in _ill) then { _dist = 10; } else {_dist = 150;};
+			_dist = if (typeOf _veh in OES_largeVehicleTypes) then { 150 } else { 10 };
 			if(_veh getVariable["unused",false] && !(_veh getVariable["markedForAntiDespawn",false])) then {
 				if(({alive _x} count crew _veh) isEqualTo 0 && ({isPlayer _x} count ((getPos _veh) nearEntities["CAManBase",_dist])) isEqualTo 0) then {
 					_dbInfo = _veh getVariable["dbInfo",[]];
